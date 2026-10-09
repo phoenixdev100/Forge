@@ -79,7 +79,7 @@ export default function WorkoutSummaryPage() {
   return (
     <div className="min-h-dvh bg-bg pb-16">
       <header className="border-b border-border bg-bg/95 pt-safe">
-        <div className="mx-auto flex h-14 w-full max-w-2xl items-center justify-between px-4">
+        <div className="mx-auto flex h-14 w-full max-w-5xl items-center justify-between px-4">
           <Link to="/app" className="flex items-center gap-2">
             <Logo className="size-6" />
             <span className="text-sm font-semibold text-text">Forge</span>
@@ -90,7 +90,7 @@ export default function WorkoutSummaryPage() {
         </div>
       </header>
 
-      <main className="mx-auto w-full max-w-2xl px-4 pt-8">
+      <main className="mx-auto w-full max-w-5xl px-4 pt-8">
         {/* The moment */}
         <motion.div
           initial={{ opacity: 0, scale: 0.95 }}
@@ -257,10 +257,10 @@ export default function WorkoutSummaryPage() {
         ) : null}
 
         <div className="mt-8 flex flex-col gap-2 sm:flex-row">
-          <ButtonLink size="lg" fullWidth to="/app" leftIcon={<Home className="size-4" />}>
+          <ButtonLink size="md" fullWidth to="/app" leftIcon={<Home className="size-4" />}>
             Back to dashboard
           </ButtonLink>
-          <ButtonLink variant="secondary" size="lg" fullWidth to="/app/history" state={undefined}>
+          <ButtonLink variant="secondary" size="md" fullWidth to="/app/history" state={undefined}>
             View history
           </ButtonLink>
         </div>

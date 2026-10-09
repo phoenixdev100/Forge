@@ -50,10 +50,10 @@ export function ShiftForwardDialog({
       size="sm"
       footer={
         <>
-          <Button variant="ghost" onClick={onClose} disabled={shift.isPending}>
+          <Button variant="ghost" size="sm" onClick={onClose} disabled={shift.isPending}>
             Cancel
           </Button>
-          <Button onClick={() => shift.mutate(scope === 'ongoing')} isLoading={shift.isPending} data-autofocus>
+          <Button size="sm" onClick={() => shift.mutate(scope === 'ongoing')} isLoading={shift.isPending} data-autofocus>
             Shift forward
           </Button>
         </>

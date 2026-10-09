@@ -150,6 +150,10 @@
     font-feature-settings: 'cv11', 'ss01';
     -webkit-font-smoothing: antialiased;
     text-rendering: optimizeLegibility;
+    /* clip (not hidden) keeps position:sticky working while killing stray
+       horizontal scroll on small screens */
+    overflow-x: clip;
+    -webkit-tap-highlight-color: transparent;
     /* Workout mode has sticky headers and a bottom bar; this stops iOS from
        bouncing the whole page while the user taps set inputs. */
     overscroll-behavior-y: none;

@@ -69,43 +69,54 @@ function CreatePlanDialog({ open, onClose }: { open: boolean; onClose: () => voi
       title="Create a workout plan"
       description="A weekly cycle by default - change the length for rotating splits. Everything stays editable."
       variant="sheet"
+      size="xl"
       footer={
         <>
-          <Button variant="ghost" onClick={onClose}>Cancel</Button>
-          <Button onClick={() => create.mutate()} isLoading={create.isPending}>Create plan</Button>
+          <Button variant="ghost" size="sm" onClick={onClose}>Cancel</Button>
+          <Button size="sm" onClick={() => create.mutate()} isLoading={create.isPending}>Create plan</Button>
         </>
       }
     >
-      <div className="space-y-5">
-        <Input
-          label="Plan name"
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          placeholder="e.g. Push Pull Legs, or My routine"
-          data-autofocus
-        />
-        <Textarea
-          label="Description (optional)"
-          value={description}
-          onChange={(e) => setDescription(e.target.value)}
-          placeholder="What is this plan for?"
-          rows={2}
-        />
-        <Select label="Cycle length" value={cycleLength} onChange={(e) => setCycleLength(Number(e.target.value))}>
-          {CYCLE_LENGTHS.map((c) => (
-            <option key={c.value} value={c.value}>{c.label}</option>
-          ))}
-        </Select>
+      <div className="grid gap-5 lg:grid-cols-[minmax(0,5fr)_minmax(0,6fr)]">
+        {/* Left - the plan itself */}
+        <div className="space-y-3">
+          <Input
+            label="Plan name"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            placeholder="e.g. Push Pull Legs, or My routine"
+            data-autofocus
+          />
+          <Textarea
+            label="Description (optional)"
+            value={description}
+            onChange={(e) => setDescription(e.target.value)}
+            placeholder="What is this plan for?"
+            rows={2}
+          />
+          <Select label="Cycle length" value={cycleLength} onChange={(e) => setCycleLength(Number(e.target.value))}>
+            {CYCLE_LENGTHS.map((c) => (
+              <option key={c.value} value={c.value}>{c.label}</option>
+            ))}
+          </Select>
+          <div className="rounded-[var(--radius-card)] border border-border bg-surface-inset px-3 py-2.5">
+            <p className="text-xs leading-relaxed text-text-muted">
+              A template prefills days, exercises and set targets - <span className="text-text">everything stays editable</span> in
+              the builder, including after workouts are logged.
+            </p>
+          </div>
+        </div>
 
-        <div>
-          <p className="mb-2 text-sm font-medium text-text">Start from a template</p>
-          <div className="grid gap-2 sm:grid-cols-2">
+        {/* Right - templates, scrollable on their own so the page never scrolls */}
+        <div className="min-w-0">
+          <p className="mb-2 text-xs font-semibold tracking-wide text-text-subtle uppercase">Start from a template</p>
+          <div className="grid content-start gap-2 sm:grid-cols-2">
             <button
               type="button"
               onClick={() => setTemplateSlug(null)}
               aria-pressed={templateSlug === null}
               className={cn(
-                'rounded-[var(--radius-card)] border px-4 py-3 text-left transition-colors',
+                'rounded-[var(--radius-card)] border px-3 py-2 text-left transition-colors',
                 templateSlug === null ? 'border-accent bg-accent-soft' : 'border-border hover:border-border-strong',
               )}
             >
@@ -119,13 +130,13 @@ function CreatePlanDialog({ open, onClose }: { open: boolean; onClose: () => voi
                 onClick={() => setTemplateSlug(t.slug)}
                 aria-pressed={templateSlug === t.slug}
                 className={cn(
-                  'rounded-[var(--radius-card)] border px-4 py-3 text-left transition-colors',
+                  'rounded-[var(--radius-card)] border px-3 py-2.5 text-left transition-colors',
                   templateSlug === t.slug ? 'border-accent bg-accent-soft' : 'border-border hover:border-border-strong',
                 )}
               >
                 <p className={cn('flex items-center gap-1.5 text-sm font-medium', templateSlug === t.slug ? 'text-accent' : 'text-text')}>
-                  <Sparkles className="size-3.5" aria-hidden />
-                  {t.name}
+                  <Sparkles className="size-3.5 shrink-0" aria-hidden />
+                  <span className="truncate">{t.name}</span>
                 </p>
                 <p className="mt-0.5 line-clamp-2 text-xs text-text-muted">{t.description}</p>
                 <p className="mt-1 text-[11px] text-text-subtle">{t.daysPerWeek} days/week</p>
@@ -283,7 +294,7 @@ export default function PlansPage() {
                 ))}
               </div>
             ) : null}
-            <Button onClick={() => setCreateOpen(true)} leftIcon={<Plus className="size-4" />}>New plan</Button>
+            <Button onClick={() => setCreateOpen(true)} leftIcon={<Plus className="size-4" />} className="max-sm:order-first max-sm:mr-auto">New plan</Button>
           </>
         }
       />

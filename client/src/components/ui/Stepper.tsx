@@ -36,7 +36,7 @@ export function Stepper({
   label?: string;
   suffix?: string;
   placeholder?: string;
-  size?: 'sm' | 'md' | 'lg';
+  size?: 'xs' | 'sm' | 'md' | 'lg';
   allowDecimals?: boolean;
   disabled?: boolean;
   className?: string;
@@ -91,9 +91,11 @@ export function Stepper({
     setDraft(null);
   };
 
-  const heights = { sm: 'h-9', md: 'h-11', lg: 'h-14' } as const;
-  const buttonSizes = { sm: 'w-9', md: 'w-11', lg: 'w-12' } as const;
-  const textSizes = { sm: 'text-sm', md: 'text-base', lg: 'text-xl font-semibold' } as const;
+  const heights = { xs: 'h-8', sm: 'h-9', md: 'h-11', lg: 'h-14' } as const;
+  // Buttons stay 44px tall; slightly narrower on phones so the number field
+  // keeps room for "100.5" on a 320px-wide set row.
+  const buttonSizes = { xs: 'w-8', sm: 'w-9', md: 'w-9 sm:w-11', lg: 'w-12' } as const;
+  const textSizes = { xs: 'text-sm', sm: 'text-sm', md: 'text-base', lg: 'text-xl font-semibold' } as const;
 
   return (
     <div className={cn('flex flex-col gap-1', className)}>

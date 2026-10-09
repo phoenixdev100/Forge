@@ -75,10 +75,16 @@ function DaySheet({
 
   const QUICK_REASONS = ['Gym closed', 'Festival', 'Sick', 'Travel', 'Busy day'];
 
+  const session = entry.session;
+  // A day with nothing on it shouldn't be a dead end - land straight on the
+  // mark options instead of hiding them behind "Change this date".
+  const isEmptyDay = entry.state === 'empty' && !session;
+  const showMarkPanel = editing || isEmptyDay;
+
   const { data: planData } = useQuery({
     queryKey: qk.activePlan,
     queryFn: () => api.get<{ plan: Plan | null }>('/plans/active'),
-    enabled: editing,
+    enabled: showMarkPanel,
   });
   const workoutDays = (planData?.plan?.days ?? []).filter((d) => d.dayType === 'WORKOUT');
 
@@ -115,74 +121,22 @@ function DaySheet({
     onError: (err) => toast.error(errorMessage(err)),
   });
 
-  const session = entry.session;
-  // A day with nothing on it shouldn't be a dead end - land straight on the
-  // mark options instead of hiding them behind "Change this date".
-  const isEmptyDay = entry.state === 'empty' && !session;
-  const showMarkPanel = editing || isEmptyDay;
-
   return (
     <Dialog open onClose={onClose} title={formatDate(entry.date, 'EEEE, d MMMM')} variant="sheet" size="md">
-      <div className="space-y-5">
-        <div className="flex items-center gap-2">
-          <Badge tone={entry.state === 'completed' ? 'success' : entry.state === 'missed' ? 'danger' : 'neutral'}>
-            {STATE_LABEL[entry.state]}
-          </Badge>
-          {entry.isOverride ? <Badge tone="info">Edited just for this date</Badge> : null}
-          {entry.overrideNote ? <Badge tone="warning">{entry.overrideNote}</Badge> : null}
-          {entry.isToday ? <Badge tone="accent">Today</Badge> : null}
-        </div>
-
-        {/* The completed session - what actually happened */}
-        {session ? (
-          <div className="rounded-[var(--radius-card)] border border-border bg-surface-inset p-4">
-            <p className="text-sm font-semibold text-text">{session.title}</p>
-            <p className="tnum mt-1.5 text-xs text-text-muted">
-              {session.exerciseCount} exercises · {session.totalSets} sets
-              {session.durationSeconds ? ` · ${formatDuration(session.durationSeconds)}` : ''}
-              {session.totalVolumeKg ? ` · ${formatVolume(session.totalVolumeKg, unit)}` : ''}
-            </p>
-            <div className="mt-3 flex gap-2">
-              {session.status === 'IN_PROGRESS' ? (
-                <Button size="sm" onClick={() => navigate(`/app/workout/${session.id}`)} leftIcon={<Play className="size-3.5" />}>
-                  Resume
-                </Button>
-              ) : (
-                <ButtonLink size="sm" variant="secondary" to={`/app/history/${session.id}`}>
-                  View session
-                </ButtonLink>
-              )}
-            </div>
+      <div className="space-y-3">
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex flex-wrap items-center gap-1.5">
+            <Badge tone={entry.state === 'completed' ? 'success' : entry.state === 'missed' ? 'danger' : 'neutral'}>
+              {STATE_LABEL[entry.state]}
+            </Badge>
+            {entry.isOverride ? <Badge tone="info">Edited just for this date</Badge> : null}
+            {entry.overrideNote ? <Badge tone="warning">{entry.overrideNote}</Badge> : null}
+            {entry.isToday ? <Badge tone="accent">Today</Badge> : null}
           </div>
-        ) : null}
-
-        {/* The scheduled day - what the plan intends */}
-        {entry.scheduled ? (
-          <div className="rounded-[var(--radius-card)] border border-border p-4">
-            <div className="flex items-center justify-between gap-2">
-              <p className="text-sm font-semibold text-text">{entry.scheduled.label}</p>
-              {entry.scheduled.dayType === 'REST' ? <Moon className="size-4 text-text-subtle" aria-hidden /> : null}
-            </div>
-            {entry.scheduled.muscleGroups.length ? (
-              <div className="mt-2 flex flex-wrap gap-1">
-                {entry.scheduled.muscleGroups.map((m) => (
-                  <MuscleBadge key={m.id} name={m.name} colorHex={m.colorHex} size="sm" />
-                ))}
-              </div>
-            ) : null}
-            <p className="tnum mt-2 text-xs text-text-muted">
-              {entry.scheduled.exerciseCount} exercises
-              {entry.scheduled.estimatedMinutes ? ` · ~${entry.scheduled.estimatedMinutes} min` : ''}
-            </p>
-          </div>
-        ) : !session ? (
-          <p className="text-sm text-text-muted">Nothing planned for this date.</p>
-        ) : null}
-
-        {/* Actions */}
-        <div className="flex flex-wrap gap-2">
           {!session || session.status !== 'COMPLETED' ? (
             <Button
+              size="sm"
+              className="shrink-0"
               leftIcon={session?.status === 'IN_PROGRESS' ? <Play className="size-4" /> : <Dumbbell className="size-4" />}
               isLoading={start.isPending}
               onClick={() =>
@@ -191,28 +145,74 @@ function DaySheet({
                   : start.mutate({ date: entry.date, planDayId: entry.scheduled?.dayType === 'REST' ? undefined : (entry.scheduled?.planDayId ?? null) })
               }
             >
-              {session?.status === 'IN_PROGRESS' ? 'Resume workout' : entry.isPast ? 'Log workout for this day' : 'Start this workout'}
+              {session?.status === 'IN_PROGRESS' ? 'Resume' : entry.isPast ? 'Log workout' : 'Start'}
             </Button>
-          ) : null}
-          {!isEmptyDay && !editing ? (
-            <Button variant="secondary" leftIcon={<PencilLine className="size-4" />} onClick={() => setEditing(true)}>
-              Change this date
-            </Button>
-          ) : null}
-          {entry.scheduled?.dayType === 'WORKOUT' && !session ? (
-            <Button
-              variant="secondary"
-              leftIcon={<CalendarClock className="size-4" />}
-              onClick={() => setConfirmShift(true)}
-            >
-              Shift week forward
-            </Button>
-          ) : null}
+          ) : (
+            <ButtonLink size="sm" variant="secondary" to={`/app/history/${session.id}`} className="shrink-0">
+              View session
+            </ButtonLink>
+          )}
         </div>
 
+        {/* The completed session - what actually happened */}
+        {session ? (
+          <div className="rounded-[var(--radius-card)] border border-border bg-surface-inset px-3 py-2.5">
+            <p className="text-sm font-semibold text-text">{session.title}</p>
+            <p className="tnum mt-0.5 text-xs text-text-muted">
+              {session.exerciseCount} exercises · {session.totalSets} sets
+              {session.durationSeconds ? ` · ${formatDuration(session.durationSeconds)}` : ''}
+              {session.totalVolumeKg ? ` · ${formatVolume(session.totalVolumeKg, unit)}` : ''}
+            </p>
+          </div>
+        ) : null}
+
+        {/* The scheduled day - what the plan intends */}
+        {entry.scheduled ? (
+          <div className="rounded-[var(--radius-card)] border border-border px-3 py-2.5">
+            <div className="flex items-center justify-between gap-2">
+              <p className="text-sm font-semibold text-text">{entry.scheduled.label}</p>
+              {entry.scheduled.dayType === 'REST' ? <Moon className="size-4 text-text-subtle" aria-hidden /> : null}
+            </div>
+            {entry.scheduled.muscleGroups.length ? (
+              <div className="mt-1.5 flex flex-wrap gap-1">
+                {entry.scheduled.muscleGroups.map((m) => (
+                  <MuscleBadge key={m.id} name={m.name} colorHex={m.colorHex} size="sm" />
+                ))}
+              </div>
+            ) : null}
+            <p className="tnum mt-1.5 text-xs text-text-muted">
+              {entry.scheduled.exerciseCount} exercises
+              {entry.scheduled.estimatedMinutes ? ` · ~${entry.scheduled.estimatedMinutes} min` : ''}
+            </p>
+          </div>
+        ) : !session ? (
+          <p className="text-sm text-text-muted">Nothing planned for this date.</p>
+        ) : null}
+
+        {/* Secondary actions */}
+        {(!isEmptyDay && !editing) || (entry.scheduled?.dayType === 'WORKOUT' && !session) ? (
+          <div className="flex flex-wrap gap-2">
+            {!isEmptyDay && !editing ? (
+              <Button variant="secondary" size="sm" leftIcon={<PencilLine className="size-4" />} onClick={() => setEditing(true)}>
+                Change this date
+              </Button>
+            ) : null}
+            {entry.scheduled?.dayType === 'WORKOUT' && !session ? (
+              <Button
+                variant="secondary"
+                size="sm"
+                leftIcon={<CalendarClock className="size-4" />}
+                onClick={() => setConfirmShift(true)}
+              >
+                Shift week forward
+              </Button>
+            ) : null}
+          </div>
+        ) : null}
+
         {showMarkPanel ? (
-          <div className="space-y-3 rounded-[var(--radius-card)] border border-border bg-surface-inset p-4">
-            <p className="text-xs font-semibold tracking-wide text-text-subtle uppercase">
+          <div className="space-y-2.5 rounded-[var(--radius-card)] border border-border bg-surface-inset p-3">
+            <p className="text-[11px] font-semibold tracking-wide text-text-subtle uppercase">
               Mark {formatDate(entry.date, 'd MMM')} as
             </p>
             <div className="grid grid-cols-3 gap-2">
@@ -230,11 +230,11 @@ function DaySheet({
                   aria-pressed={mode === m}
                   onClick={() => setMode(m)}
                   className={cn(
-                    'flex flex-col items-center gap-1.5 rounded-[var(--radius-control)] border px-2 py-3 text-xs font-medium transition-colors',
+                    'flex items-center justify-center gap-1.5 rounded-[var(--radius-control)] border px-2 py-1.5 text-xs font-medium transition-colors',
                     mode === m ? 'border-accent bg-accent-soft text-accent' : 'border-border text-text-muted hover:border-border-strong',
                   )}
                 >
-                  <Icon className="size-4" aria-hidden />
+                  <Icon className="size-3.5" aria-hidden />
                   {label}
                 </button>
               ))}
@@ -255,32 +255,31 @@ function DaySheet({
               </Select>
             ) : null}
 
-            <div>
-              <div className="mb-1.5 flex flex-wrap gap-1.5">
-                {QUICK_REASONS.map((r) => (
-                  <button
-                    key={r}
-                    type="button"
-                    onClick={() => setNote(note === r ? '' : r)}
-                    className={cn(
-                      'rounded-full border px-2.5 py-1 text-[11px] font-medium transition-colors',
-                      note === r ? 'border-accent bg-accent-soft text-accent' : 'border-border text-text-subtle hover:border-border-strong hover:text-text-muted',
-                    )}
-                  >
-                    {r}
-                  </button>
-                ))}
-              </div>
-              <Input
-                label="Reason (optional)"
-                value={note}
-                onChange={(e) => setNote(e.target.value)}
-                placeholder="e.g. Diwali - gym closed"
-                maxLength={80}
-              />
+            <div className="flex flex-wrap items-center gap-1.5">
+              {QUICK_REASONS.map((r) => (
+                <button
+                  key={r}
+                  type="button"
+                  onClick={() => setNote(note === r ? '' : r)}
+                  className={cn(
+                    'rounded-full border px-2.5 py-1 text-[11px] font-medium transition-colors',
+                    note === r ? 'border-accent bg-accent-soft text-accent' : 'border-border text-text-subtle hover:border-border-strong hover:text-text-muted',
+                  )}
+                >
+                  {r}
+                </button>
+              ))}
             </div>
+            <Input
+              aria-label="Reason (optional)"
+              value={note}
+              onChange={(e) => setNote(e.target.value)}
+              placeholder="Reason (optional) - e.g. Diwali, gym closed"
+              maxLength={80}
+              className="h-9"
+            />
 
-            <div className="flex flex-wrap gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               <Button
                 size="sm"
                 isLoading={setOverride.isPending}
@@ -311,10 +310,8 @@ function DaySheet({
               {!isEmptyDay ? (
                 <Button variant="ghost" size="sm" onClick={() => setEditing(false)}>Cancel</Button>
               ) : null}
+              <span className="ml-auto text-[11px] text-text-subtle">Only this date changes.</span>
             </div>
-            <p className="text-[11px] text-text-subtle">
-              This changes {formatDate(entry.date, 'd MMM')} only - your weekly plan is untouched.
-            </p>
           </div>
         ) : null}
 

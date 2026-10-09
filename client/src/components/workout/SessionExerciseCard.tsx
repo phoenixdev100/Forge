@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { Check, ChevronDown, ChevronUp, History, Plus, SkipForward, Trash2 } from 'lucide-react';
+import { Check, ChevronDown, ChevronUp, History, Plus, SkipForward, Trash2, X } from 'lucide-react';
 import { api, errorMessage } from '@/lib/api';
 import { cn } from '@/lib/cn';
 import { formatDate, formatRepRange } from '@/lib/format';
@@ -122,28 +122,28 @@ function SetRow({
   return (
     <div
       className={cn(
-        'rounded-[var(--radius-control)] border p-2.5 transition-colors',
+        'flex items-center gap-2 rounded-[var(--radius-control)] border px-2 py-1.5 transition-colors',
         set.isCompleted ? 'border-success/30 bg-success-soft/50' : 'border-border bg-surface-inset',
       )}
     >
-      <div className="flex items-center justify-between gap-2">
-        <div className="flex items-center gap-2">
-          <span className="tnum text-xs font-semibold tracking-wide text-text-subtle uppercase">
-            Set {set.setNumber}
-          </span>
-          {typeBadge ? <Badge size="sm" tone={set.setType === 'WARMUP' ? 'info' : 'neutral'}>{typeBadge}</Badge> : null}
-        </div>
+      {/* Col 1: set number (+ type badge + last-time, stacked small) */}
+      <div className="w-12 shrink-0">
+        <span className="tnum text-xs font-semibold tracking-wide text-text-subtle uppercase">
+          Set {set.setNumber}
+        </span>
+        {typeBadge ? <Badge size="sm" tone={set.setType === 'WARMUP' ? 'info' : 'neutral'}>{typeBadge}</Badge> : null}
         {previous ? (
-          <span className="tnum text-[11px] text-text-subtle" title="Last time">
+          <span className="tnum block text-[10px] text-text-subtle" title="Last time">
             {formatSet(previous, tracking, unit)}
           </span>
         ) : null}
       </div>
 
-      <div className="mt-2 flex items-end gap-2">
-        <div className="grid flex-1 grid-cols-2 gap-2 sm:grid-cols-3">
+      {/* Cols 2-3: the steppers */}
+      <div className="grid flex-1 grid-cols-2 gap-1.5">
           {tracksWeight(tracking) ? (
             <Stepper
+              size="xs"
               label={weightIsOptional(tracking) ? `${weightFieldLabel(tracking)} (${unitLabel(unit)})` : `Weight (${unitLabel(unit)})`}
               value={weightDisplay}
               onChange={(v) => commitValue({ weightDisplay: v })}
@@ -156,6 +156,7 @@ function SetRow({
           ) : null}
           {tracksReps(tracking) ? (
             <Stepper
+              size="xs"
               label={tracking === 'AMRAP' ? 'Reps (max)' : 'Reps'}
               value={reps}
               onChange={(v) => commitValue({ reps: v })}
@@ -166,6 +167,7 @@ function SetRow({
           ) : null}
           {tracksTime(tracking) ? (
             <Stepper
+              size="xs"
               label="Time (sec)"
               value={timeSeconds}
               onChange={(v) => commitValue({ timeSeconds: v })}
@@ -177,6 +179,7 @@ function SetRow({
           ) : null}
           {tracksDistance(tracking) ? (
             <Stepper
+              size="xs"
               label="Distance (m)"
               value={distanceM}
               onChange={(v) => commitValue({ distanceM: v })}
@@ -197,7 +200,7 @@ function SetRow({
           aria-pressed={set.isCompleted}
           aria-label={set.isCompleted ? `Mark set ${set.setNumber} as not done` : `Complete set ${set.setNumber}`}
           className={cn(
-            'flex size-12 shrink-0 items-center justify-center rounded-full border-2 transition-all active:scale-95',
+            'flex size-9 shrink-0 items-center justify-center rounded-full border-2 transition-all active:scale-95',
             set.isCompleted
               ? 'border-success bg-success text-white'
               : 'border-border-strong text-text-subtle hover:border-accent hover:text-accent disabled:opacity-40',
@@ -205,19 +208,20 @@ function SetRow({
         >
           <Check className="size-5" aria-hidden />
         </button>
-      </div>
 
-      {/* Delete only appears when a set has no data - cleaning up blanks. */}
-      {!set.isCompleted && !setHasValue({ reps, timeSeconds, distanceM }) && exercise.sets.length > 1 ? (
-        <button
-          type="button"
-          onClick={() => deleteSet.mutate()}
-          className="mt-1.5 flex items-center gap-1 text-[11px] text-text-subtle transition-colors hover:text-danger"
-        >
-          <Trash2 className="size-3" aria-hidden /> Remove set
-        </button>
-      ) : null}
-    </div>
+        {/* Any non-completed set is removable while >1 set remains - the ✕
+            gives quick cleanup of extra/added sets. */}
+        {!set.isCompleted && exercise.sets.length > 1 ? (
+          <button
+            type="button"
+            onClick={() => deleteSet.mutate()}
+            aria-label={`Remove set ${set.setNumber}`}
+            className="flex size-7 shrink-0 items-center justify-center rounded-full text-text-subtle transition-colors hover:bg-surface-hover hover:text-danger"
+          >
+            <X className="size-3.5" aria-hidden />
+          </button>
+        ) : null}
+      </div>
   );
 }
 
@@ -291,8 +295,8 @@ export function SessionExerciseCard({
       )}
     >
       {/* Header - exercise media, name, target, progress */}
-      <div className="flex items-center gap-3 border-b border-border px-3 py-3 sm:px-4">
-        <ExerciseMedia media={exercise.exercise.media} name={exercise.nameSnapshot} mode="card" className="size-14 shrink-0" />
+      <div className="flex items-center gap-3 border-b border-border px-3 py-2 sm:px-4">
+        <ExerciseMedia media={exercise.exercise.media} name={exercise.nameSnapshot} mode="card" className="size-11 shrink-0" />
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
             <h3 className={cn('truncate text-sm font-semibold text-text sm:text-base', exercise.isSkipped && 'line-through')}>
@@ -325,21 +329,21 @@ export function SessionExerciseCard({
               <div className="absolute right-0 z-20 mt-1 w-48 overflow-hidden rounded-[var(--radius-card)] border border-border bg-surface-raised shadow-[var(--shadow-raised)]">
                 <button
                   type="button"
-                  className="flex w-full items-center gap-2.5 px-3 py-2.5 text-sm text-text-muted hover:bg-surface-hover hover:text-text"
+                  className="flex w-full items-center gap-2.5 px-3 py-2 text-sm text-text-muted hover:bg-surface-hover hover:text-text"
                   onClick={() => { setMenuOpen(false); setNoteDraft(exercise.notes ?? ''); setNoteOpen(true); }}
                 >
                   Exercise note
                 </button>
                 <button
                   type="button"
-                  className="flex w-full items-center gap-2.5 px-3 py-2.5 text-sm text-text-muted hover:bg-surface-hover hover:text-text"
+                  className="flex w-full items-center gap-2.5 px-3 py-2 text-sm text-text-muted hover:bg-surface-hover hover:text-text"
                   onClick={() => { setMenuOpen(false); update.mutate({ isSkipped: !exercise.isSkipped }); }}
                 >
                   <SkipForward className="size-4" aria-hidden /> {exercise.isSkipped ? 'Unskip' : 'Skip exercise'}
                 </button>
                 <button
                   type="button"
-                  className="flex w-full items-center gap-2.5 border-t border-border px-3 py-2.5 text-sm text-text-muted hover:bg-surface-hover hover:text-danger"
+                  className="flex w-full items-center gap-2.5 border-t border-border px-3 py-2 text-sm text-text-muted hover:bg-surface-hover hover:text-danger"
                   onClick={() => { setMenuOpen(false); removeExercise.mutate(); }}
                 >
                   <Trash2 className="size-4" aria-hidden /> Remove from workout
@@ -384,7 +388,7 @@ export function SessionExerciseCard({
       ) : null}
 
       {/* Sets */}
-      <ul className="space-y-2 p-3 sm:p-4">
+      <ul className="space-y-1 p-2 sm:p-2.5">
         {exercise.sets.map((set) => (
           <li key={set.id}>
             <SetRow
@@ -398,7 +402,7 @@ export function SessionExerciseCard({
         ))}
       </ul>
 
-      <div className="flex items-center gap-2 border-t border-border px-3 py-2.5 sm:px-4">
+      <div className="flex items-center gap-2 border-t border-border px-3 py-2 sm:px-4">
         <Button
           variant="secondary"
           size="sm"

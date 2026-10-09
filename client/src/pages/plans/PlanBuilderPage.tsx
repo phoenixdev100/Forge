@@ -54,6 +54,12 @@ import { ErrorState, PageLoader } from '@/components/ui/States';
 
 const WEEKDAY_NAMES = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
 
+/** Plan edits sync into a live workout server-side, so refetch sessions too. */
+function refreshPlan(qc: ReturnType<typeof useQueryClient>, planId: string) {
+  void qc.invalidateQueries({ queryKey: qk.plan(planId) });
+  void qc.invalidateQueries({ queryKey: ['sessions'] });
+}
+
 function dayTitle(position: number, cycleLength: number) {
   return cycleLength === 7 ? WEEKDAY_NAMES[position] ?? `Day ${position + 1}` : `Day ${position + 1}`;
 }
@@ -287,8 +293,8 @@ function ExerciseConfigDialog({
       size="lg"
       footer={
         <>
-          <Button variant="ghost" onClick={onClose}>Cancel</Button>
-          <Button onClick={() => save.mutate()} isLoading={save.isPending}>Save targets</Button>
+          <Button variant="ghost" size="sm" onClick={onClose}>Cancel</Button>
+          <Button size="sm" onClick={() => save.mutate()} isLoading={save.isPending}>Save targets</Button>
         </>
       }
     >
@@ -392,7 +398,7 @@ function ExerciseConfigDialog({
                           prev.map((s, j) => (j === i ? { ...s, targetWeightDisplay: e.target.value === '' ? null : Number(e.target.value) } : s)),
                         )
                       }
-                      className="tnum h-9 w-20 rounded-[var(--radius-control)] border border-border bg-surface px-2 text-center text-sm text-text"
+                      className="tnum h-9 min-w-12 flex-1 rounded-[var(--radius-control)] border border-border bg-surface px-2 text-center text-sm text-text"
                     />
                   ) : null}
                   {tracksReps(tracking) ? (
@@ -407,7 +413,7 @@ function ExerciseConfigDialog({
                           prev.map((s, j) => (j === i ? { ...s, targetReps: e.target.value === '' ? null : Number(e.target.value) } : s)),
                         )
                       }
-                      className="tnum h-9 w-16 rounded-[var(--radius-control)] border border-border bg-surface px-2 text-center text-sm text-text"
+                      className="tnum h-9 min-w-12 flex-1 rounded-[var(--radius-control)] border border-border bg-surface px-2 text-center text-sm text-text"
                     />
                   ) : null}
                   <button
@@ -469,13 +475,13 @@ function ExerciseRow({
 
   const remove = useMutation({
     mutationFn: () => api.delete(`/plans/exercises/${planExercise.id}`),
-    onSuccess: () => void queryClient.invalidateQueries({ queryKey: qk.plan(planId) }),
+    onSuccess: () => refreshPlan(queryClient, planId),
     onError: (err) => toast.error(errorMessage(err)),
   });
 
   const duplicate = useMutation({
     mutationFn: () => api.post(`/plans/exercises/${planExercise.id}/duplicate`),
-    onSuccess: () => void queryClient.invalidateQueries({ queryKey: qk.plan(planId) }),
+    onSuccess: () => refreshPlan(queryClient, planId),
     onError: (err) => toast.error(errorMessage(err)),
   });
 
@@ -618,12 +624,12 @@ function DaySettingsDialog({ day, planId, open, onClose }: { day: PlanDay; planI
         variant="sheet"
         footer={
           <>
-            <Button variant="ghost" onClick={onClose}>Cancel</Button>
-            <Button onClick={() => update.mutate()} isLoading={update.isPending}>Save</Button>
+            <Button variant="ghost" size="sm" onClick={onClose}>Cancel</Button>
+            <Button size="sm" onClick={() => update.mutate()} isLoading={update.isPending}>Save</Button>
           </>
         }
       >
-        <div className="space-y-4">
+        <div className="space-y-3">
           <Input
             label="Day label"
             value={label}
@@ -633,7 +639,7 @@ function DaySettingsDialog({ day, planId, open, onClose }: { day: PlanDay; planI
           />
           <Stepper label="Estimated duration (min)" value={minutes} onChange={setMinutes} step={5} min={0} max={600} />
           <Textarea label="Notes" value={notes} onChange={(e) => setNotes(e.target.value)} rows={2} placeholder="e.g. light day, focus on form" />
-          <div className="flex gap-2 border-t border-border pt-4">
+          <div className="flex gap-2 border-t border-border pt-3">
             <Button variant="secondary" size="sm" leftIcon={<Copy className="size-3.5" />} onClick={() => duplicateDay.mutate()} isLoading={duplicateDay.isPending}>
               Duplicate day
             </Button>
@@ -684,7 +690,7 @@ function DayEditor({ day, planId }: { day: PlanDay; planId: string }) {
 
   const reorder = useMutation({
     mutationFn: (orderedIds: string[]) => api.put(`/plans/days/${day.id}/exercises/order`, { orderedIds }),
-    onSuccess: () => void queryClient.invalidateQueries({ queryKey: qk.plan(planId) }),
+    onSuccess: () => refreshPlan(queryClient, planId),
     onError: (err) => {
       setExerciseIds(null);
       toast.error(errorMessage(err, 'Could not reorder - reload and try again.'));
@@ -693,7 +699,7 @@ function DayEditor({ day, planId }: { day: PlanDay; planId: string }) {
 
   const addBulk = useMutation({
     mutationFn: (body: { exercises: Array<Record<string, unknown>> }) => api.post(`/plans/days/${day.id}/exercises/bulk`, body),
-    onSuccess: () => void queryClient.invalidateQueries({ queryKey: qk.plan(planId) }),
+    onSuccess: () => refreshPlan(queryClient, planId),
     onError: (err) => toast.error(errorMessage(err)),
   });
 
@@ -848,12 +854,12 @@ function PlanSettingsDialog({ plan, open, onClose }: { plan: Plan; open: boolean
       title="Plan settings"
       footer={
         <>
-          <Button variant="ghost" onClick={onClose}>Cancel</Button>
-          <Button onClick={() => update.mutate()} isLoading={update.isPending} disabled={!name.trim()}>Save</Button>
+          <Button variant="ghost" size="sm" onClick={onClose}>Cancel</Button>
+          <Button size="sm" onClick={() => update.mutate()} isLoading={update.isPending} disabled={!name.trim()}>Save</Button>
         </>
       }
     >
-      <div className="space-y-4">
+      <div className="space-y-3">
         <Input label="Plan name" value={name} onChange={(e) => setName(e.target.value)} required />
         <Textarea label="Description" value={description} onChange={(e) => setDescription(e.target.value)} rows={2} />
         <Select

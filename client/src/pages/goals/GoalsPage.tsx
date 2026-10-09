@@ -114,8 +114,9 @@ function GoalDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
       variant="sheet"
       footer={
         <>
-          <Button variant="ghost" onClick={onClose}>Cancel</Button>
+          <Button variant="ghost" size="sm" onClick={onClose}>Cancel</Button>
           <Button
+            size="sm"
             onClick={() => create.mutate()}
             isLoading={create.isPending}
             disabled={!title.trim() || target == null || (NEEDS_EXERCISE.includes(metric) && !exerciseId)}
@@ -350,8 +351,8 @@ function MeasurementsSection() {
         variant="sheet"
         footer={
           <>
-            <Button variant="ghost" onClick={() => setOpen(false)}>Cancel</Button>
-            <Button onClick={() => save.mutate()} isLoading={save.isPending} disabled={weight == null && waist == null}>
+            <Button variant="ghost" size="sm" onClick={() => setOpen(false)}>Cancel</Button>
+            <Button size="sm" onClick={() => save.mutate()} isLoading={save.isPending} disabled={weight == null && waist == null}>
               Save
             </Button>
           </>

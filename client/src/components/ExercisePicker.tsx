@@ -121,8 +121,8 @@ export function ExercisePicker({ open, onClose, initialMuscleSlug, title = 'Add 
             <span className="mr-auto text-sm text-text-muted">
               {selected.size ? `${selected.size} selected` : 'Tap exercises to select them'}
             </span>
-            <Button variant="ghost" onClick={onClose}>Cancel</Button>
-            <Button onClick={commit} disabled={!selected.size} leftIcon={<Plus className="size-4" />}>
+            <Button variant="ghost" size="sm" onClick={onClose}>Cancel</Button>
+            <Button size="sm" onClick={commit} disabled={!selected.size} leftIcon={<Plus className="size-4" />}>
               Add {selected.size ? `(${selected.size})` : ''}
             </Button>
           </>
@@ -140,7 +140,7 @@ export function ExercisePicker({ open, onClose, initialMuscleSlug, title = 'Add 
             onChange={(e) => setQuery(e.target.value)}
             placeholder='Try "bench", "curl", "squat"…'
             aria-label="Search exercises"
-            className="h-11 w-full rounded-[var(--radius-control)] border border-border bg-surface-inset pr-9 pl-9 text-sm text-text placeholder:text-text-subtle focus:border-accent focus:outline-none"
+            className="h-10 w-full rounded-[var(--radius-control)] border border-border bg-surface-inset pr-9 pl-9 text-sm text-text placeholder:text-text-subtle focus:border-accent focus:outline-none"
           />
           {query ? (
             <button
@@ -170,9 +170,9 @@ export function ExercisePicker({ open, onClose, initialMuscleSlug, title = 'Add 
         <ul className="space-y-1.5" aria-busy={isFetching}>
           {isPending ? (
             Array.from({ length: 6 }, (_, i) => (
-              <li key={i} className="flex items-center gap-3 rounded-[var(--radius-control)] border border-border p-2.5">
-                <Skeleton className="size-14 shrink-0" />
-                <div className="min-w-0 flex-1 space-y-2">
+              <li key={i} className="flex items-center gap-2.5 rounded-[var(--radius-control)] border border-border p-2">
+                <Skeleton className="size-11 shrink-0" />
+                <div className="min-w-0 flex-1 space-y-1.5">
                   <Skeleton className="h-3.5 w-1/2" />
                   <Skeleton className="h-3 w-1/3" />
                 </div>
@@ -189,17 +189,17 @@ export function ExercisePicker({ open, onClose, initialMuscleSlug, title = 'Add 
                     disabled={already}
                     onClick={() => toggle(exercise)}
                     className={cn(
-                      'flex w-full items-center gap-3 rounded-[var(--radius-control)] border p-2.5 text-left transition-colors',
+                      'flex w-full items-center gap-2.5 rounded-[var(--radius-control)] border p-2 text-left transition-colors',
                       isSelected
                         ? 'border-accent bg-accent-soft'
                         : 'border-border bg-surface hover:border-border-strong',
                       already && 'opacity-50',
                     )}
                   >
-                    <ExerciseMedia media={exercise.media} name={exercise.name} mode="thumb" className="size-14 shrink-0" />
+                    <ExerciseMedia media={exercise.media} name={exercise.name} mode="thumb" className="size-11 shrink-0" />
                     <span className="min-w-0 flex-1">
                       <span className="block truncate text-sm font-medium text-text">{exercise.name}</span>
-                      <span className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-text-subtle">
+                      <span className="mt-0.5 flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-xs text-text-subtle">
                         <span>{exercise.primaryMuscle.name}</span>
                         {exercise.equipment ? <span aria-hidden>·</span> : null}
                         {exercise.equipment ? <span>{exercise.equipment.name}</span> : null}
@@ -209,7 +209,7 @@ export function ExercisePicker({ open, onClose, initialMuscleSlug, title = 'Add 
                     </span>
                     <span
                       className={cn(
-                        'flex size-6 shrink-0 items-center justify-center rounded-full border',
+                        'flex size-5.5 shrink-0 items-center justify-center rounded-full border',
                         already
                           ? 'border-transparent bg-surface-inset text-text-subtle'
                           : isSelected
@@ -263,7 +263,7 @@ function FilterChip({ active, onClick, children }: { active: boolean; onClick: (
       aria-selected={active}
       onClick={onClick}
       className={cn(
-        'h-8 shrink-0 rounded-full border px-3 text-xs font-medium whitespace-nowrap transition-colors',
+        'h-7 shrink-0 rounded-full border px-2.5 text-xs font-medium whitespace-nowrap transition-colors',
         active ? 'border-accent bg-accent-soft text-accent' : 'border-border bg-surface text-text-muted hover:border-border-strong',
       )}
     >

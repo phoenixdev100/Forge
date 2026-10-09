@@ -272,8 +272,8 @@ export default function ExerciseDetailPage() {
         variant="sheet"
         footer={
           <>
-            <Button variant="ghost" onClick={() => setNoteOpen(false)}>Cancel</Button>
-            <Button onClick={() => saveNote.mutate(noteDraft ?? '')} isLoading={saveNote.isPending}>Save note</Button>
+            <Button variant="ghost" size="sm" onClick={() => setNoteOpen(false)}>Cancel</Button>
+            <Button size="sm" onClick={() => saveNote.mutate(noteDraft ?? '')} isLoading={saveNote.isPending}>Save note</Button>
           </>
         }
       >

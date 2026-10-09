@@ -23,6 +23,7 @@ import type { ExerciseProgress, ProgressOverview } from '@/lib/types';
 import { useUnit } from '@/providers/AuthProvider';
 import { PageHeader } from '@/components/layout/AppShell';
 import { Card, CardBody, CardHeader, StatTile } from '@/components/ui/Card';
+import { Select } from '@/components/ui/Input';
 import { EmptyState, ErrorState, PageLoader } from '@/components/ui/States';
 
 const RANGE_OPTIONS = [
@@ -82,15 +83,13 @@ function MuscleBalanceChart({ data }: { data: ProgressOverview['muscleGroupBalan
   const total = top.reduce((s, m) => s + m.sets, 0) || 1;
   return (
     <div className="flex items-center gap-6">
-      <ResponsiveContainer width={130} height={130}>
-        <PieChart>
-          <Pie data={top} dataKey="sets" innerRadius={40} outerRadius={60} strokeWidth={0} isAnimationActive>
-            {top.map((m) => (
-              <Cell key={m.id} fill={m.colorHex} />
-            ))}
-          </Pie>
-        </PieChart>
-      </ResponsiveContainer>
+      <PieChart width={130} height={130}>
+        <Pie data={top} dataKey="sets" innerRadius={40} outerRadius={60} strokeWidth={0} isAnimationActive>
+          {top.map((m) => (
+            <Cell key={m.id} fill={m.colorHex} />
+          ))}
+        </Pie>
+      </PieChart>
       <ul className="min-w-0 flex-1 space-y-1.5">
         {top.map((m) => (
           <li key={m.id} className="flex items-center gap-2 text-xs">
@@ -267,16 +266,17 @@ export default function ProgressPage() {
                 icon={<TrendingUp className="size-4" />}
                 action={
                   trainedList.length ? (
-                    <select
+                    <Select
                       value={selectedExercise ?? ''}
                       onChange={(e) => setExerciseId(e.target.value)}
                       aria-label="Pick an exercise"
-                      className="h-8 max-w-44 rounded-[var(--radius-control)] border border-border bg-surface-inset px-2 text-xs text-text focus:border-accent focus:outline-none"
+                      containerClassName="w-44"
+                      className="h-8 px-2 text-xs"
                     >
                       {trainedList.map((e) => (
                         <option key={e.id} value={e.id}>{e.name}</option>
                       ))}
-                    </select>
+                    </Select>
                   ) : undefined
                 }
               />

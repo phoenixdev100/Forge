@@ -60,6 +60,8 @@ export function AddToPlanDialog({ exercise, open, onClose }: { exercise: Exercis
       }),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['plans'] });
+      // A live workout on this day picks the exercise up instantly.
+      void queryClient.invalidateQueries({ queryKey: ['sessions'] });
       const day = workoutDays.find((d) => d.id === dayId);
       toast.success(`Added to ${day?.displayLabel ?? 'your plan'}.`);
       onClose();
@@ -75,8 +77,8 @@ export function AddToPlanDialog({ exercise, open, onClose }: { exercise: Exercis
       variant="sheet"
       footer={
         <>
-          <Button variant="ghost" onClick={onClose}>Cancel</Button>
-          <Button onClick={() => add.mutate()} isLoading={add.isPending} disabled={!dayId}>
+          <Button variant="ghost" size="sm" onClick={onClose}>Cancel</Button>
+          <Button size="sm" onClick={() => add.mutate()} isLoading={add.isPending} disabled={!dayId}>
             Add to workout
           </Button>
         </>

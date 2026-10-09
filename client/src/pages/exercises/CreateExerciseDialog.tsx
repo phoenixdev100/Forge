@@ -106,8 +106,8 @@ export function CreateExerciseDialog({
       size="lg"
       footer={
         <>
-          <Button variant="ghost" onClick={onClose}>Cancel</Button>
-          <Button onClick={() => save.mutate()} isLoading={save.isPending} disabled={!name.trim() || !primaryMuscleId}>
+          <Button variant="ghost" size="sm" onClick={onClose}>Cancel</Button>
+          <Button size="sm" onClick={() => save.mutate()} isLoading={save.isPending} disabled={!name.trim() || !primaryMuscleId}>
             {editing ? 'Save changes' : 'Create exercise'}
           </Button>
         </>

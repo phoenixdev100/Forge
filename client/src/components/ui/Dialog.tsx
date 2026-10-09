@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useId, useRef, useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { AnimatePresence, motion } from 'framer-motion';
-import { X } from 'lucide-react';
+import { TriangleAlert, X } from 'lucide-react';
 import { cn } from '@/lib/cn';
 import { Button } from './Button';
 
@@ -13,7 +13,9 @@ type DialogProps = {
   onClose: () => void;
   title: ReactNode;
   description?: ReactNode;
-  children: ReactNode;
+  /** Small icon bubble rendered left of the title (e.g. warning for deletes). */
+  titleIcon?: ReactNode;
+  children?: ReactNode;
   footer?: ReactNode;
   /** `sheet` slides up from the bottom - the right pattern on a phone. */
   variant?: 'modal' | 'sheet';
@@ -45,6 +47,7 @@ export function Dialog({
   onClose,
   title,
   description,
+  titleIcon,
   children,
   footer,
   variant = 'modal',
@@ -152,8 +155,9 @@ export function Dialog({
               </div>
             ) : null}
 
-            <div className="flex items-start justify-between gap-4 px-5 pt-5 pb-4">
-              <div className="min-w-0">
+            <div className="flex items-start justify-between gap-3 px-5 pt-4 pb-3">
+              {titleIcon ? <span className="mt-0.5 shrink-0">{titleIcon}</span> : null}
+              <div className="min-w-0 flex-1">
                 <h2 id={titleId} className="text-base font-semibold text-text">
                   {title}
                 </h2>
@@ -170,10 +174,10 @@ export function Dialog({
               ) : null}
             </div>
 
-            <div className="min-h-0 flex-1 overflow-y-auto px-5 pb-5">{children}</div>
+            {children ? <div className="min-h-0 flex-1 overflow-y-auto px-5 pb-4">{children}</div> : null}
 
             {footer ? (
-              <div className="flex items-center justify-end gap-3 border-t border-border bg-surface px-5 py-4">
+              <div className="flex items-center justify-end gap-2 border-t border-border bg-surface px-5 py-3">
                 {footer}
               </div>
             ) : null}
@@ -213,19 +217,24 @@ export function ConfirmDialog({
       onClose={onClose}
       title={title}
       description={description}
+      titleIcon={
+        tone === 'danger' ? (
+          <span className="flex size-9 items-center justify-center rounded-full bg-danger-soft text-danger">
+            <TriangleAlert className="size-4" aria-hidden />
+          </span>
+        ) : undefined
+      }
       size="sm"
       footer={
         <>
-          <Button variant="ghost" onClick={onClose} disabled={isLoading}>
+          <Button variant="ghost" size="sm" onClick={onClose} disabled={isLoading}>
             {cancelLabel}
           </Button>
-          <Button variant={tone} onClick={onConfirm} isLoading={isLoading} data-autofocus>
+          <Button variant={tone} size="sm" onClick={onConfirm} isLoading={isLoading} data-autofocus>
             {confirmLabel}
           </Button>
         </>
       }
-    >
-      <span className="sr-only">{description}</span>
-    </Dialog>
+    />
   );
 }

@@ -116,7 +116,7 @@ export default function ExerciseLibraryPage() {
               onChange={(e) => setParam('q', e.target.value || null)}
               placeholder='Search - try "bench", "curl", "squat"…'
               aria-label="Search exercises"
-              className="h-11 w-full rounded-[var(--radius-control)] border border-border bg-surface-inset pr-9 pl-9 text-sm text-text placeholder:text-text-subtle focus:border-accent focus:outline-none"
+              className="h-10 w-full rounded-[var(--radius-control)] border border-border bg-surface-inset pr-9 pl-9 text-sm text-text placeholder:text-text-subtle focus:border-accent focus:outline-none"
             />
             {query ? (
               <button

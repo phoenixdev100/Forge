@@ -11,6 +11,8 @@ import {
   LogOut,
   Monitor,
   Moon,
+  PanelLeftClose,
+  PanelLeftOpen,
   Play,
   Settings,
   Shield,
@@ -53,16 +55,18 @@ const MOBILE_NAV: NavItem[] = [
   { to: '/app/progress', label: 'Progress', icon: TrendingUp },
 ];
 
-function NavRow({ item, onNavigate }: { item: NavItem; onNavigate?: () => void }) {
+function NavRow({ item, onNavigate, collapsed }: { item: NavItem; onNavigate?: () => void; collapsed?: boolean }) {
   const Icon = item.icon;
   return (
     <NavLink
       to={item.to}
       end={item.end}
       onClick={onNavigate}
+      title={collapsed ? item.label : undefined}
       className={({ isActive }) =>
         cn(
-          'flex items-center gap-3 rounded-[var(--radius-control)] px-3 py-2 text-sm font-medium transition-colors',
+          'flex items-center rounded-[var(--radius-control)] py-2 text-sm font-medium transition-colors',
+          collapsed ? 'justify-center px-0' : 'gap-3 px-3',
           isActive
             ? 'bg-accent-soft text-accent'
             : 'text-text-muted hover:bg-surface-hover hover:text-text',
@@ -70,18 +74,34 @@ function NavRow({ item, onNavigate }: { item: NavItem; onNavigate?: () => void }
       }
     >
       <Icon className="size-4 shrink-0" aria-hidden />
-      <span className="truncate">{item.label}</span>
+      {collapsed ? <span className="sr-only">{item.label}</span> : <span className="truncate">{item.label}</span>}
     </NavLink>
   );
 }
 
-function ThemeToggle() {
+function ThemeToggle({ collapsed }: { collapsed?: boolean }) {
   const { theme, setTheme } = useTheme();
   const options = [
     { value: 'light' as const, icon: Sun, label: 'Light' },
     { value: 'dark' as const, icon: Moon, label: 'Dark' },
     { value: 'system' as const, icon: Monitor, label: 'System' },
   ];
+
+  if (collapsed) {
+    const current = options.find((o) => o.value === theme) ?? options[0];
+    const next = options[(options.indexOf(current) + 1) % options.length];
+    return (
+      <button
+        type="button"
+        onClick={() => setTheme(next.value)}
+        aria-label={`Theme: ${current.label}. Switch to ${next.label}`}
+        title={`Theme: ${current.label}`}
+        className="flex size-8 items-center justify-center rounded-[var(--radius-control)] border border-border bg-surface-inset text-text-subtle transition-colors hover:text-text"
+      >
+        <current.icon className="size-3.5" aria-hidden />
+      </button>
+    );
+  }
 
   return (
     <div
@@ -109,7 +129,7 @@ function ThemeToggle() {
   );
 }
 
-function UserMenu() {
+function UserMenu({ collapsed }: { collapsed?: boolean }) {
   const { user, logout } = useAuth();
   const [open, setOpen] = useState(false);
   const location = useLocation();
@@ -132,16 +152,24 @@ function UserMenu() {
         onClick={() => setOpen((v) => !v)}
         aria-expanded={open}
         aria-haspopup="menu"
-        className="flex w-full items-center gap-2.5 rounded-[var(--radius-control)] p-2 text-left transition-colors hover:bg-surface-hover"
+        title={collapsed ? user.name : undefined}
+        className={cn(
+          'flex w-full items-center gap-2.5 rounded-[var(--radius-control)] p-2 text-left transition-colors hover:bg-surface-hover',
+          collapsed && 'justify-center',
+        )}
       >
         <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-accent-soft text-xs font-semibold text-accent">
           {initials || '?'}
         </span>
-        <span className="min-w-0 flex-1">
-          <span className="block truncate text-sm font-medium text-text">{user.name}</span>
-          <span className="block truncate text-xs text-text-subtle">{user.email}</span>
-        </span>
-        <ChevronDown className={cn('size-4 shrink-0 text-text-subtle transition-transform', open && 'rotate-180')} aria-hidden />
+        {collapsed ? null : (
+          <>
+            <span className="min-w-0 flex-1">
+              <span className="block truncate text-sm font-medium text-text">{user.name}</span>
+              <span className="block truncate text-xs text-text-subtle">{user.email}</span>
+            </span>
+            <ChevronDown className={cn('size-4 shrink-0 text-text-subtle transition-transform', open && 'rotate-180')} aria-hidden />
+          </>
+        )}
       </button>
 
       {open ? (
@@ -214,9 +242,30 @@ function ActiveSessionBanner() {
   );
 }
 
+const SIDEBAR_COLLAPSED_KEY = 'forge.sidebar.collapsed';
+
 export function AppShell({ children }: { children: ReactNode }) {
   const { user } = useAuth();
   const location = useLocation();
+  const [collapsed, setCollapsed] = useState(() => {
+    try {
+      return localStorage.getItem(SIDEBAR_COLLAPSED_KEY) === '1';
+    } catch {
+      return false;
+    }
+  });
+
+  const toggleCollapsed = () => {
+    setCollapsed((v) => {
+      const next = !v;
+      try {
+        localStorage.setItem(SIDEBAR_COLLAPSED_KEY, next ? '1' : '0');
+      } catch {
+        /* storage unavailable */
+      }
+      return next;
+    });
+  };
 
   // Workout mode is a focused, distraction-free surface: no chrome at all.
   const isWorkoutMode = location.pathname.startsWith('/app/workout');
@@ -225,37 +274,77 @@ export function AppShell({ children }: { children: ReactNode }) {
   return (
     <div className="min-h-dvh bg-bg">
       {/* --- Desktop sidebar ------------------------------------------------ */}
-      <aside className="fixed inset-y-0 left-0 z-30 hidden w-64 flex-col border-r border-border bg-bg-subtle lg:flex">
-        <div className="px-5 py-5">
-          <Link to="/app" className="inline-flex items-center gap-2">
-            <Logo className="size-7" />
-            <span className="text-base font-semibold tracking-tight text-text">Forge</span>
-          </Link>
+      <aside
+        className={cn(
+          'fixed inset-y-0 left-0 z-30 hidden flex-col border-r border-border bg-bg-subtle transition-[width] lg:flex',
+          collapsed ? 'w-16' : 'w-64',
+        )}
+      >
+        <div className={cn('flex items-center py-4', collapsed ? 'justify-center px-2' : 'justify-between pr-3 pl-5')}>
+          {collapsed ? (
+            <button
+              type="button"
+              onClick={toggleCollapsed}
+              aria-label="Expand sidebar"
+              title="Expand sidebar"
+              className="group relative flex size-8 items-center justify-center rounded-[var(--radius-control)] transition-colors hover:bg-surface-hover"
+            >
+              <Logo className="size-6 transition-opacity group-hover:opacity-0" />
+              <PanelLeftOpen
+                className="absolute size-4 text-text opacity-0 transition-opacity group-hover:opacity-100"
+                aria-hidden
+              />
+            </button>
+          ) : (
+            <>
+              <Link to="/app" className="inline-flex items-center gap-2">
+                <Logo className="size-7 shrink-0" />
+                <span className="text-base font-semibold tracking-tight text-text">Forge</span>
+              </Link>
+              <button
+                type="button"
+                onClick={toggleCollapsed}
+                aria-label="Collapse sidebar"
+                title="Collapse sidebar"
+                className="flex size-7 shrink-0 items-center justify-center rounded-[var(--radius-control)] text-text-subtle transition-colors hover:bg-surface-hover hover:text-text"
+              >
+                <PanelLeftClose className="size-4" />
+              </button>
+            </>
+          )}
         </div>
 
-        <nav className="flex-1 space-y-6 overflow-y-auto px-3 pb-4">
+        <nav className={cn('flex-1 space-y-6 overflow-y-auto pb-4', collapsed ? 'px-2' : 'px-3')}>
           <div className="space-y-0.5">
             {PRIMARY_NAV.map((item) => (
-              <NavRow key={item.to} item={item} />
+              <NavRow key={item.to} item={item} collapsed={collapsed} />
             ))}
           </div>
           <div className="space-y-0.5">
-            <p className="px-3 pb-1.5 text-[11px] font-semibold tracking-wider text-text-subtle uppercase">Progress</p>
+            {collapsed ? (
+              <div className="mx-2 mb-2 border-t border-border" aria-hidden />
+            ) : (
+              <p className="px-3 pb-1.5 text-[11px] font-semibold tracking-wider text-text-subtle uppercase">Progress</p>
+            )}
             {SECONDARY_NAV.map((item) => (
-              <NavRow key={item.to} item={item} />
+              <NavRow key={item.to} item={item} collapsed={collapsed} />
             ))}
           </div>
           {user?.role === 'ADMIN' ? (
             <div className="space-y-0.5">
-              <p className="px-3 pb-1.5 text-[11px] font-semibold tracking-wider text-text-subtle uppercase">Manage</p>
-              <NavRow item={{ to: '/app/admin', label: 'Exercise library', icon: Shield }} />
+              {collapsed ? (
+                <div className="mx-2 mb-2 border-t border-border" aria-hidden />
+              ) : (
+                <p className="px-3 pb-1.5 text-[11px] font-semibold tracking-wider text-text-subtle uppercase">Manage</p>
+              )}
+              <NavRow item={{ to: '/app/admin', label: 'Exercise library', icon: Shield }} collapsed={collapsed} />
             </div>
           ) : null}
         </nav>
 
-        <div className="space-y-2 border-t border-border p-3">
-          <ThemeToggle />
-          <UserMenu />
+        <div className={cn('space-y-2 border-t border-border p-3', collapsed && 'flex flex-col items-center')}>
+          <ThemeToggle collapsed={collapsed} />
+          <UserMenu collapsed={collapsed} />
         </div>
       </aside>
 
@@ -285,7 +374,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         </div>
       </header>
 
-      <div className="lg:pl-64">
+      <div className={cn('transition-[padding-left]', collapsed ? 'lg:pl-16' : 'lg:pl-64')}>
         <ActiveSessionBanner />
         <main className="mx-auto w-full max-w-7xl px-4 pt-5 pb-28 sm:px-6 lg:px-8 lg:pt-8 lg:pb-12">{children}</main>
       </div>
@@ -358,7 +447,7 @@ export function PageHeader({
         </div>
         {description ? <p className="mt-1.5 max-w-2xl text-sm text-text-muted">{description}</p> : null}
       </div>
-      {action ? <div className="flex shrink-0 items-center gap-2">{action}</div> : null}
+      {action ? <div className="flex shrink-0 items-center gap-2 max-sm:w-full max-sm:justify-end">{action}</div> : null}
     </div>
   );
 }

@@ -1,10 +1,10 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useMutation, useQuery } from '@tanstack/react-query';
+import { useMutation } from '@tanstack/react-query';
 import { KeyRound, LogOut, Monitor, Moon, ShieldAlert, Sun, User as UserIcon } from 'lucide-react';
 import { api, errorMessage, fieldErrors } from '@/lib/api';
 import { cn } from '@/lib/cn';
-import type { NotificationPrefs, User } from '@/lib/types';
+import type { User } from '@/lib/types';
 import { toast } from 'sonner';
 import { useAuth } from '@/providers/AuthProvider';
 import { useTheme } from '@/providers/ThemeProvider';
@@ -15,36 +15,6 @@ import { ConfirmDialog } from '@/components/ui/Dialog';
 import { Input, Select } from '@/components/ui/Input';
 import { PageLoader } from '@/components/ui/States';
 import type { Unit } from '@/lib/units';
-
-function Toggle({ checked, onChange, label, description }: { checked: boolean; onChange: (v: boolean) => void; label: string; description?: string }) {
-  return (
-    <label className="flex cursor-pointer items-center justify-between gap-4 py-1">
-      <span>
-        <span className="block text-sm font-medium text-text">{label}</span>
-        {description ? <span className="mt-0.5 block text-xs text-text-subtle">{description}</span> : null}
-      </span>
-      <button
-        type="button"
-        role="switch"
-        aria-checked={checked}
-        aria-label={label}
-        onClick={() => onChange(!checked)}
-        className={cn(
-          'relative h-7 w-12 shrink-0 rounded-full transition-colors',
-          checked ? 'bg-accent' : 'bg-border-strong',
-        )}
-      >
-        <span
-          className={cn(
-            'absolute top-1 left-1 size-5 rounded-full bg-white shadow transition-transform',
-            checked && 'translate-x-5',
-          )}
-          aria-hidden
-        />
-      </button>
-    </label>
-  );
-}
 
 const THEME_OPTIONS = [
   { value: 'light', label: 'Light', icon: Sun },
@@ -76,11 +46,6 @@ export default function SettingsPage() {
   const [logoutAllOpen, setLogoutAllOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
 
-  const { data: prefsData, isPending: prefsLoading } = useQuery({
-    queryKey: ['notification-prefs'],
-    queryFn: () => api.get<{ preferences: NotificationPrefs }>('/users/me/notifications'),
-  });
-
   const saveProfile = useMutation({
     mutationFn: () =>
       api.patch<{ user: User }>('/users/me', {
@@ -96,12 +61,6 @@ export default function SettingsPage() {
       toast.success('Profile saved.');
     },
     onError: setProfileError,
-  });
-
-  const savePrefs = useMutation({
-    mutationFn: (body: Record<string, unknown>) => api.patch('/users/me/notifications', body),
-    onSuccess: () => toast.success('Notification preferences saved.'),
-    onError: (err) => toast.error(errorMessage(err)),
   });
 
   const changePassword = useMutation({
@@ -136,21 +95,22 @@ export default function SettingsPage() {
 
   if (!user) return <PageLoader />;
 
-  const prefs = prefsData?.preferences;
   const profileErrors = fieldErrors(profileError);
   const pwErrors = fieldErrors(passwordError);
 
   return (
-    <div className="max-w-2xl">
+    <div>
       <PageHeader title="Settings" description={user.email} />
 
-      <div className="space-y-5">
+      <div className="grid items-start gap-5 lg:grid-cols-2">
+        {/* Columns flatten on mobile (contents) so DOM order can differ from visual order */}
+        <div className="flex flex-col gap-5 max-lg:contents">
         {/* Profile */}
         <Card>
           <CardHeader title="Profile" icon={<UserIcon className="size-4" />} />
           <CardBody className="space-y-4 pt-4">
             <Input label="Name" value={name} onChange={(e) => setName(e.target.value)} error={profileErrors['name']} required />
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <Select label="Goal" value={goal} onChange={(e) => setGoal(e.target.value)}>
                 <option value="">Not set</option>
                 <option value="BUILD_MUSCLE">Build muscle</option>
@@ -183,17 +143,37 @@ export default function SettingsPage() {
             </div>
             {profileError ? <p role="alert" className="text-sm text-danger">{errorMessage(profileError)}</p> : null}
             <div className="flex justify-end">
-              <Button onClick={() => saveProfile.mutate()} isLoading={saveProfile.isPending} disabled={!name.trim()}>
+              <Button size="sm" onClick={() => saveProfile.mutate()} isLoading={saveProfile.isPending} disabled={!name.trim()}>
                 Save profile
               </Button>
             </div>
           </CardBody>
         </Card>
 
+        {/* Danger zone - always the last card on a phone */}
+        <Card className="border-danger/30 max-lg:order-4">
+          <CardHeader title="Account" icon={<ShieldAlert className="size-4" />} />
+          <CardBody className="pt-4">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <p className="text-sm font-medium text-text">Delete account</p>
+                <p className="mt-0.5 text-xs text-text-subtle">
+                  Your workouts are retained anonymously for reference but the account can't sign in again.
+                </p>
+              </div>
+              <Button variant="danger" size="sm" onClick={() => setDeleteOpen(true)}>
+                Delete account
+              </Button>
+            </div>
+          </CardBody>
+        </Card>
+        </div>
+
+        <div className="flex flex-col gap-5 max-lg:contents">
         {/* Units & theme */}
         <Card>
           <CardHeader title="Preferences" icon={<Moon className="size-4" />} />
-          <CardBody className="space-y-5 pt-4">
+          <CardBody className="space-y-4 pt-4">
             <div>
               <p className="mb-2 text-sm font-medium text-text">Weight unit</p>
               <div className="grid grid-cols-2 gap-2">
@@ -204,7 +184,7 @@ export default function SettingsPage() {
                     onClick={() => setUnit(u)}
                     aria-pressed={unit === u}
                     className={cn(
-                      'h-11 rounded-[var(--radius-control)] border text-sm font-medium transition-colors',
+                      'h-9 rounded-[var(--radius-control)] border text-sm font-medium transition-colors',
                       unit === u ? 'border-accent bg-accent-soft text-accent' : 'border-border text-text-muted hover:border-border-strong',
                     )}
                   >
@@ -225,7 +205,7 @@ export default function SettingsPage() {
                     onClick={() => setTheme(t.value)}
                     aria-pressed={theme === t.value}
                     className={cn(
-                      'flex h-11 items-center justify-center gap-2 rounded-[var(--radius-control)] border text-sm font-medium transition-colors',
+                      'flex h-9 items-center justify-center gap-2 rounded-[var(--radius-control)] border text-sm font-medium transition-colors',
                       theme === t.value ? 'border-accent bg-accent-soft text-accent' : 'border-border text-text-muted hover:border-border-strong',
                     )}
                   >
@@ -238,47 +218,10 @@ export default function SettingsPage() {
           </CardBody>
         </Card>
 
-        {/* Notifications */}
-        <Card>
-          <CardHeader title="Notifications" description="Gentle nudges only - nothing pings without your say-so." />
-          <CardBody className="divide-y divide-border pt-2">
-            {prefsLoading || !prefs ? (
-              <PageLoader />
-            ) : (
-              <>
-                <Toggle
-                  label="Workout reminders"
-                  description="A nudge on scheduled training days."
-                  checked={prefs.workoutReminder}
-                  onChange={(v) => savePrefs.mutate({ workoutReminder: v })}
-                />
-                <Toggle
-                  label="PR notifications"
-                  description="Tell me when I break a record."
-                  checked={prefs.prNotification}
-                  onChange={(v) => savePrefs.mutate({ prNotification: v })}
-                />
-                <Toggle
-                  label="Streak reminders"
-                  description="Warn me before a streak day slips away."
-                  checked={prefs.streakReminder}
-                  onChange={(v) => savePrefs.mutate({ streakReminder: v })}
-                />
-                <Toggle
-                  label="Goal reminders"
-                  description="Occasional check-ins on open goals."
-                  checked={prefs.goalReminder}
-                  onChange={(v) => savePrefs.mutate({ goalReminder: v })}
-                />
-              </>
-            )}
-          </CardBody>
-        </Card>
-
         {/* Security */}
         <Card>
           <CardHeader title="Security" icon={<KeyRound className="size-4" />} />
-          <CardBody className="space-y-4 pt-4">
+          <CardBody className="space-y-3 pt-4">
             <Input
               label="Current password"
               type="password"
@@ -286,7 +229,7 @@ export default function SettingsPage() {
               value={currentPassword}
               onChange={(e) => setCurrentPassword(e.target.value)}
             />
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <Input
                 label="New password"
                 type="password"
@@ -307,6 +250,7 @@ export default function SettingsPage() {
             {passwordError ? <p role="alert" className="text-sm text-danger">{errorMessage(passwordError)}</p> : null}
             <div className="flex flex-wrap items-center justify-between gap-3">
               <Button
+                className="h-9"
                 onClick={() => changePassword.mutate()}
                 isLoading={changePassword.isPending}
                 disabled={!currentPassword || newPassword.length < 8 || newPassword !== confirmPassword}
@@ -319,24 +263,7 @@ export default function SettingsPage() {
             </div>
           </CardBody>
         </Card>
-
-        {/* Danger zone */}
-        <Card className="border-danger/30">
-          <CardHeader title="Account" icon={<ShieldAlert className="size-4" />} />
-          <CardBody className="pt-4">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <div>
-                <p className="text-sm font-medium text-text">Delete account</p>
-                <p className="mt-0.5 text-xs text-text-subtle">
-                  Your workouts are retained anonymously for reference but the account can't sign in again.
-                </p>
-              </div>
-              <Button variant="danger" size="sm" onClick={() => setDeleteOpen(true)}>
-                Delete account
-              </Button>
-            </div>
-          </CardBody>
-        </Card>
+        </div>
       </div>
 
       <ConfirmDialog

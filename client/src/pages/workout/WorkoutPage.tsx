@@ -177,7 +177,7 @@ export default function WorkoutPage() {
           </nav>
         ) : null}
 
-        <main className="mx-auto w-full max-w-2xl space-y-4 px-4 pt-4">
+        <main className="mx-auto w-full max-w-2xl space-y-4 px-4 pt-4 pb-28 lg:grid lg:max-w-6xl lg:grid-cols-2 lg:items-start lg:gap-4 lg:space-y-0">
           {session.exercises.map((exercise) => (
             <motion.section
               key={exercise.id}
@@ -199,17 +199,17 @@ export default function WorkoutPage() {
           <button
             type="button"
             onClick={() => setPickerOpen(true)}
-            className="flex w-full items-center justify-center gap-2 rounded-[var(--radius-card)] border border-dashed border-border-strong py-4 text-sm font-medium text-text-muted transition-colors hover:border-accent hover:text-accent"
+            className="flex w-full items-center justify-center gap-2 rounded-[var(--radius-card)] border border-dashed border-border-strong py-3 text-sm font-medium text-text-muted transition-colors hover:border-accent hover:text-accent lg:col-span-2"
           >
             <Plus className="size-4" aria-hidden />
             Add an exercise
           </button>
-          <div ref={scrollSentinel} aria-hidden />
+          <div ref={scrollSentinel} aria-hidden className="lg:col-span-2" />
         </main>
 
         {/* Sticky bottom bar - the action bar a thumb can reach */}
         <div className="fixed inset-x-0 bottom-0 z-30 border-t border-border bg-bg/95 pb-safe backdrop-blur-md">
-          <div className="mx-auto flex w-full max-w-2xl items-center gap-3 px-4 py-3">
+          <div className="mx-auto flex w-full max-w-2xl items-center justify-between gap-3 px-4 py-3 lg:max-w-6xl">
             <Button
               variant="ghost"
               size="sm"
@@ -219,10 +219,10 @@ export default function WorkoutPage() {
               End early
             </Button>
             <Button
-              size="xl"
-              fullWidth
+              size="lg"
               onClick={() => setFinishOpen(true)}
-              leftIcon={<Flag className="size-5" />}
+              leftIcon={<Flag className="size-4" />}
+              className="lg:h-10 lg:px-5"
             >
               Finish workout
             </Button>
