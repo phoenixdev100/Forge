@@ -153,7 +153,11 @@ export async function seedExercises(lookups: Lookups) {
     usedSlugs.add(slug);
 
     // Two key positions of the movement, cross-faded into a silent loop.
-    const frameUrls = ex.images.map((img) => `${IMAGE_BASE}/${img}`);
+    // A curated override can borrow frames from a sibling exercise when the
+    // dataset itself ships no imagery (e.g. the kettlebell halo entries).
+    const frameUrls = (override?.images?.length ? override.images : ex.images).map(
+      (img) => `${IMAGE_BASE}/${img}`,
+    );
 
     const secondarySlugs = [
       ...new Set(
@@ -217,6 +221,7 @@ export async function seedExercises(lookups: Lookups) {
 
     const secondarySlugs = (ex.secondaryMuscles ?? []).filter((s) => s !== ex.primaryMuscle);
     const aliases = [...new Set([...(ex.aliases ?? []), ex.name.toLowerCase()])];
+    const frameUrls = (ex.images ?? []).map((img) => `${IMAGE_BASE}/${img}`);
 
     rows.push({
       data: {
@@ -237,8 +242,11 @@ export async function seedExercises(lookups: Lookups) {
         tips: ex.tips ?? [],
         breathing: ex.breathing ?? null,
         aliases,
-        mediaType: MediaType.NONE,
-        frameUrls: [],
+        thumbnailUrl: frameUrls[0] ?? null,
+        mediaUrl: frameUrls[1] ?? frameUrls[0] ?? null,
+        mediaType: frameUrls.length ? MediaType.IMAGE : MediaType.NONE,
+        mediaAttribution: frameUrls.length ? ATTRIBUTION : null,
+        frameUrls,
         status: PublishStatus.PUBLISHED,
         isCustom: false,
         popularity: ex.popularity ?? 0,

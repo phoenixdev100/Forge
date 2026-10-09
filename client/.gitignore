@@ -1,0 +1,29 @@
+# Dependencies & build output
+node_modules/
+dist/
+dist-ssr/
+*.tsbuildinfo
+
+# Env / secrets
+.env
+.env.*
+!.env.example
+*.local
+
+# Vite / test caches
+.vite/
+coverage/
+
+# Logs & OS / editor junk
+*.log
+.DS_Store
+Thumbs.db
+desktop.ini
+.vscode/*
+!.vscode/extensions.json
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?

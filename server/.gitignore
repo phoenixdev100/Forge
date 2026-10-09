@@ -1,0 +1,24 @@
+# Dependencies & build output
+node_modules/
+dist/
+*.tsbuildinfo
+
+# Generated at install/build time
+src/generated/
+prisma/.cache/
+
+# Env / secrets
+.env
+.env.*
+!.env.example
+
+# Locally uploaded media (exercise images, progress photos)
+uploads/
+
+# Logs & OS junk
+logs/
+*.log
+npm-debug.log*
+.DS_Store
+Thumbs.db
+desktop.ini

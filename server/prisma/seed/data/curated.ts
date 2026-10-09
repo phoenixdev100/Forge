@@ -44,6 +44,11 @@ export type Curated = {
   tips?: string[];
   breathing?: string;
   popularity?: number;
+  /**
+   * Dataset-relative frame paths ("Goblet_Squat/0.jpg") borrowed from a
+   * sibling exercise when this movement has no media of its own.
+   */
+  images?: string[];
 };
 
 const BRACE = 'Brace your core as if about to be punched, and keep that tension for the whole set.';
@@ -1102,6 +1107,30 @@ export const curated: Curated[] = [
     trackingType: TrackingType.TIME,
     popularity: 380,
   },
+  // ------------------------------------------------- MEDIA-ONLY OVERRIDES
+  // Dataset entries that ship with an empty image list - borrow the closest
+  // honest frames from sibling movements so the library never shows a blank.
+  {
+    datasetId: 'Kettlebell_Halo',
+    slug: 'kettlebell-halo',
+    name: 'Kettlebell Halo',
+    images: ['Goblet_Squat/0.jpg'],
+  },
+  {
+    datasetId: 'Kettlebell_Halo_with_Overhead_Extension',
+    slug: 'kettlebell-halo-with-overhead-extension',
+    name: 'Kettlebell Halo with Overhead Extension',
+    images: ['Goblet_Squat/0.jpg', 'Kettlebell_Arnold_Press/1.jpg'],
+  },
+  {
+    datasetId: 'Kettlebell_Overhead_Triceps_Extension',
+    slug: 'kettlebell-overhead-triceps-extension',
+    name: 'Kettlebell Overhead Triceps Extension',
+    images: [
+      'Standing_Overhead_Barbell_Triceps_Extension/0.jpg',
+      'Standing_Overhead_Barbell_Triceps_Extension/1.jpg',
+    ],
+  },
 ];
 
 /**
@@ -1124,6 +1153,7 @@ export const extraExercises: Curated[] = [
     isUnilateral: true,
     defaultRestSeconds: 120,
     popularity: 640,
+    images: ['Split_Squat_with_Dumbbells/0.jpg', 'Split_Squat_with_Dumbbells/1.jpg'],
     description:
       'A single-leg squat with the rear foot elevated. Brutally effective for quads and glutes, and it exposes side-to-side differences.',
     instructions: [
@@ -1154,6 +1184,7 @@ export const extraExercises: Curated[] = [
     difficulty: Difficulty.ADVANCED,
     defaultRestSeconds: 90,
     popularity: 420,
+    images: ['Ab_Roller/0.jpg', 'Ab_Roller/1.jpg'],
     instructions: [
       'Kneel on the floor holding an ab wheel under your shoulders.',
       'Brace your core and tuck your ribs down toward your hips.',
@@ -1176,6 +1207,7 @@ export const extraExercises: Curated[] = [
     difficulty: Difficulty.BEGINNER,
     defaultRestSeconds: 105,
     popularity: 400,
+    images: ['Band_Assisted_Pull-Up/0.jpg', 'Band_Assisted_Pull-Up/1.jpg'],
     instructions: [
       'Set the assistance weight on the machine - more weight means more help.',
       'Kneel or stand on the pad and take a grip slightly wider than your shoulders.',
@@ -1237,6 +1269,7 @@ export const extraExercises: Curated[] = [
     trackingType: TrackingType.DISTANCE_TIME,
     defaultRestSeconds: 120,
     popularity: 300,
+    images: ['Farmers_Walk/0.jpg', 'Farmers_Walk/1.jpg'],
     instructions: [
       'Pick up a heavy dumbbell or kettlebell in each hand.',
       'Stand tall with the ribs down and shoulders back.',
