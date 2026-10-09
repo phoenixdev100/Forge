@@ -2,7 +2,7 @@ import type { z } from 'zod';
 import { prisma } from '../../db/prisma.js';
 import { badRequest, conflict, notFound } from '../../lib/errors.js';
 import { parseIsoDate } from '../../lib/dates.js';
-import { PlanDayType, PublishStatus } from '../../generated/prisma/enums.js';
+import { PlanDayType, PublishStatus, SessionStatus, SetType } from '../../generated/prisma/enums.js';
 import { planDaySelect, planSelect, serializePlan, serializePlanDay, serializePlanExercise } from './plans.serializer.js';
 import { planExerciseSelect } from './plans.serializer.js';
 import type {
@@ -501,6 +501,120 @@ async function nextSortOrder(planDayId: string) {
   return (last?.sortOrder ?? -1) + 1;
 }
 
+/**
+ * Keeps a live, in-progress workout in step with plan edits: exercises added
+ * to the day appear in the session, removed ones drop out, and order follows
+ * the plan. Two rules protect real work:
+ *   - a session exercise with completed sets is never deleted by a plan edit
+ *   - exercises added mid-workout by hand (no planExerciseId) are untouched
+ */
+async function syncActiveSession(planDayId: string) {
+  const sessions = await prisma.workoutSession.findMany({
+    where: { planDayId, status: SessionStatus.IN_PROGRESS },
+    select: { id: true },
+  });
+  if (!sessions.length) return;
+
+  const planExercises = await prisma.planExercise.findMany({
+    where: { planDayId },
+    orderBy: { sortOrder: 'asc' },
+    select: {
+      id: true,
+      sortOrder: true,
+      exerciseId: true,
+      muscleGroupId: true,
+      targetSets: true,
+      targetRepsMin: true,
+      targetRepsMax: true,
+      targetWeightKg: true,
+      restSeconds: true,
+      trackingType: true,
+      notes: true,
+      exercise: { select: { name: true, trackingType: true, defaultRestSeconds: true } },
+      plannedSets: {
+        orderBy: { setNumber: 'asc' },
+        select: {
+          setNumber: true,
+          setType: true,
+          targetWeightKg: true,
+          targetReps: true,
+          targetTimeSeconds: true,
+          targetDistanceM: true,
+        },
+      },
+    },
+  });
+  const planIds = new Set(planExercises.map((p) => p.id));
+
+  for (const session of sessions) {
+    const sessionExercises = await prisma.sessionExercise.findMany({
+      where: { sessionId: session.id },
+      select: {
+        id: true,
+        planExerciseId: true,
+        sets: { where: { isCompleted: true }, select: { id: true }, take: 1 },
+      },
+    });
+    const byPlanId = new Map(
+      sessionExercises.filter((s) => s.planExerciseId).map((s) => [s.planExerciseId!, s] as const),
+    );
+
+    // Remove rows whose plan exercise disappeared - unless work was logged.
+    const stale = sessionExercises.filter(
+      (s) => s.planExerciseId && !planIds.has(s.planExerciseId) && s.sets.length === 0,
+    );
+    if (stale.length) {
+      await prisma.sessionExercise.deleteMany({ where: { id: { in: stale.map((s) => s.id) } } });
+    }
+
+    // Snapshot newly added plan exercises into the session, same shape as startSession.
+    for (const pe of planExercises.filter((p) => !byPlanId.has(p.id))) {
+      const trackingType = pe.trackingType ?? pe.exercise.trackingType;
+      const plannedSetCount = pe.plannedSets.length || pe.targetSets || 0;
+      await prisma.sessionExercise.create({
+        data: {
+          sessionId: session.id,
+          exerciseId: pe.exerciseId,
+          planExerciseId: pe.id,
+          muscleGroupId: pe.muscleGroupId,
+          sortOrder: pe.sortOrder,
+          nameSnapshot: pe.exercise.name,
+          trackingType,
+          targetSets: pe.targetSets,
+          targetRepsMin: pe.targetRepsMin,
+          targetRepsMax: pe.targetRepsMax,
+          targetWeightKg: pe.targetWeightKg,
+          restSeconds: pe.restSeconds ?? pe.exercise.defaultRestSeconds,
+          notes: pe.notes,
+          sets: {
+            create: Array.from({ length: plannedSetCount }, (_, index) => {
+              const planned = pe.plannedSets[index];
+              return {
+                setNumber: index + 1,
+                setType: planned?.setType ?? SetType.NORMAL,
+                weightKg: planned?.targetWeightKg ?? pe.targetWeightKg ?? null,
+                reps: planned?.targetReps ?? pe.targetRepsMin ?? null,
+                timeSeconds: planned?.targetTimeSeconds ?? null,
+                distanceM: planned?.targetDistanceM ?? null,
+              };
+            }),
+          },
+        },
+      });
+    }
+
+    // Keep the session's ordering aligned with the plan.
+    await prisma.$transaction(
+      planExercises.map((pe) =>
+        prisma.sessionExercise.updateMany({
+          where: { sessionId: session.id, planExerciseId: pe.id },
+          data: { sortOrder: pe.sortOrder },
+        }),
+      ),
+    );
+  }
+}
+
 export async function addPlanExercise(userId: string, dayId: string, input: z.infer<typeof addPlanExerciseSchema>) {
   await assertDay(userId, dayId);
   await assertExerciseVisible(userId, input.exerciseId);
@@ -518,6 +632,7 @@ export async function addPlanExercise(userId: string, dayId: string, input: z.in
 
   // Popularity drives the default "relevance" ordering in the library.
   await prisma.exercise.update({ where: { id: exerciseId }, data: { popularity: { increment: 1 } } });
+  await syncActiveSession(dayId);
 
   return serializePlanExercise(created as never);
 }
@@ -553,6 +668,7 @@ export async function addPlanExercises(userId: string, dayId: string, input: z.i
     }),
     prisma.exercise.updateMany({ where: { id: { in: ids } }, data: { popularity: { increment: 1 } } }),
   ]);
+  await syncActiveSession(dayId);
 
   const rows = await prisma.planExercise.findMany({
     where: { planDayId: dayId },
@@ -577,9 +693,10 @@ export async function updatePlanExercise(
 }
 
 export async function removePlanExercise(userId: string, planExerciseId: string) {
-  await assertPlanExercise(userId, planExerciseId);
+  const { planDayId } = await assertPlanExercise(userId, planExerciseId);
   // Past sessions keep their snapshot (planExerciseId is SetNull on delete).
   await prisma.planExercise.delete({ where: { id: planExerciseId } });
+  await syncActiveSession(planDayId);
 }
 
 /** Inserts a copy directly after the original, shifting the rest down. */
@@ -604,6 +721,7 @@ export async function duplicatePlanExercise(userId: string, planExerciseId: stri
       select: planExerciseSelect,
     });
   });
+  await syncActiveSession(planDayId);
 
   return serializePlanExercise(created as never);
 }
@@ -621,6 +739,8 @@ export async function reorderPlanExercises(userId: string, dayId: string, ordere
   await prisma.$transaction(
     orderedIds.map((id, index) => prisma.planExercise.update({ where: { id }, data: { sortOrder: index } })),
   );
+
+  await syncActiveSession(dayId);
 
   const updated = await prisma.planExercise.findMany({
     where: { planDayId: dayId },

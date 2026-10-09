@@ -2,7 +2,7 @@ import 'dotenv/config';
 import { defineConfig, env } from 'prisma/config';
 
 // A shadow database is only needed by `prisma migrate dev`. `db push` never
-// touches one, and Neon poolers can't CREATE DATABASE anyway — so only wire it
+// touches one, and Neon poolers can't CREATE DATABASE anyway - so only wire it
 // up when a genuinely separate database is configured.
 const shadow = process.env.SHADOW_DATABASE_URL;
 

@@ -311,7 +311,7 @@ export async function seedDemoHistory(userId: string) {
       });
 
       sessionCount += 1;
-      // One quiet dot per session — remote databases make this phase slow
+      // One quiet dot per session - remote databases make this phase slow
       // enough that silence reads as "stuck".
       process.stdout.write('.');
     }

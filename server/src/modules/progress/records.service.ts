@@ -155,7 +155,7 @@ export async function detectPersonalRecords(
           previousValue: previous,
           weightKg: candidate.weightKg,
           reps: candidate.reps,
-          achievedAt: achievedAt.toISOString(),
+          achievedAt: achievedAt.toISOString().slice(0, 10),
         });
       }
     }
@@ -205,7 +205,8 @@ export async function listPersonalRecords(userId: string, exerciseId?: string) {
     weightKg: num(r.weightKg),
     reps: r.reps,
     timeSeconds: r.timeSeconds,
-    achievedAt: r.achievedAt.toISOString(),
+    // Dates travel as YYYY-MM-DD - the session's marked day, immune to timezone drift.
+    achievedAt: r.achievedAt.toISOString().slice(0, 10),
     sessionId: r.sessionId,
     exercise: r.exercise,
   });
@@ -241,7 +242,7 @@ export async function recentPersonalRecords(userId: string, limit = 5) {
     previousValue: num(r.previousValue),
     weightKg: num(r.weightKg),
     reps: r.reps,
-    achievedAt: r.achievedAt.toISOString(),
+    achievedAt: r.achievedAt.toISOString().slice(0, 10),
     exercise: r.exercise,
   }));
 }

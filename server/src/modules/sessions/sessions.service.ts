@@ -752,7 +752,9 @@ export async function completeSession(
     session.durationSeconds ??
     Math.max(0, Math.round((completedAt.getTime() - session.startedAt.getTime()) / 1000));
 
-  const records = await detectPersonalRecords(userId, sessionId, completedAt);
+  // Records belong to the day the workout was logged FOR, not the moment the
+  // user pressed Finish - backfilling yesterday's session must not misdate PRs.
+  const records = await detectPersonalRecords(userId, sessionId, session.date);
 
   await prisma.workoutSession.update({
     where: { id: sessionId },
