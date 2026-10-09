@@ -1,0 +1,31 @@
+{
+  "compilerOptions": {
+    "target": "ES2023",
+    "lib": ["ES2023"],
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "types": ["node"],
+
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "noImplicitOverride": true,
+    "noFallthroughCasesInSwitch": true,
+    "exactOptionalPropertyTypes": false,
+    "verbatimModuleSyntax": true,
+
+    "outDir": "dist",
+    "rootDir": ".",
+    "sourceMap": true,
+    "declaration": false,
+    "esModuleInterop": true,
+    "resolveJsonModule": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+
+    // No baseUrl: paths resolve relative to this file in modern TS.
+    "paths": {
+      "#/*": ["./src/*"]
+    }
+  },
+  "include": ["src/**/*.ts", "prisma/**/*.ts"]
+}

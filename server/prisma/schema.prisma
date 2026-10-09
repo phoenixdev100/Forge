@@ -1,0 +1,898 @@
+// Forge - personal gym workout planner, tracker & progress platform
+//
+// Design principles encoded in this schema:
+//
+// 1. PLAN vs SESSION vs HISTORY are fully separate object graphs.
+//    WorkoutPlan/PlanDay/PlanExercise/PlanSet describe *intent*.
+//    WorkoutSession/SessionExercise/SessionSet describe *what actually happened*.
+//    Sessions snapshot the data they need (names, targets, unit) so editing or
+//    deleting a future plan can never rewrite recorded history.
+//
+// 2. NOTHING IS FORCED. A PlanDay can have 0..n muscle groups and 0..n
+//    exercises. A PlanExercise can have 0..n planned sets. A SessionExercise
+//    can have more or fewer sets than planned, and every SessionSet carries its
+//    own independent weight/reps/time/distance.
+//
+// 3. CANONICAL UNITS. All weights are stored in kilograms and all lengths in
+//    centimetres. `User.unit` and `WorkoutSession.unit` are display
+//    preferences only, so switching KG <-> LB never corrupts history.
+
+generator client {
+  provider     = "prisma-client"
+  output       = "../src/generated/prisma"
+  runtime      = "nodejs"
+  moduleFormat = "esm"
+}
+
+// Prisma 7 reads the connection URL from prisma.config.ts for CLI commands and
+// from the driver adapter (src/db/prisma.ts) at runtime.
+datasource db {
+  provider = "postgresql"
+}
+
+// ---------------------------------------------------------------------------
+// Enums
+// ---------------------------------------------------------------------------
+
+enum Role {
+  USER
+  ADMIN
+}
+
+enum UnitSystem {
+  KG
+  LB
+}
+
+enum FitnessGoal {
+  BUILD_MUSCLE
+  STRENGTH
+  FAT_LOSS
+  GENERAL_FITNESS
+  CUSTOM
+}
+
+enum ExperienceLevel {
+  BEGINNER
+  INTERMEDIATE
+  ADVANCED
+}
+
+enum Difficulty {
+  BEGINNER
+  INTERMEDIATE
+  ADVANCED
+}
+
+/// Compound vs isolation. Kept separate from MovementType on purpose.
+enum Mechanic {
+  COMPOUND
+  ISOLATION
+  UNKNOWN
+}
+
+enum MovementType {
+  PUSH
+  PULL
+  SQUAT
+  HINGE
+  LUNGE
+  CARRY
+  ROTATION
+  ISOMETRIC
+  CARDIO
+  MOBILITY
+  OLYMPIC
+  OTHER
+}
+
+/// How a set of this exercise is measured. Makes the set system future-proof.
+enum TrackingType {
+  WEIGHT_REPS
+  BODYWEIGHT_REPS
+  WEIGHTED_BODYWEIGHT
+  REPS_ONLY
+  TIME
+  WEIGHTED_TIME
+  DISTANCE_TIME
+  AMRAP
+}
+
+enum MediaType {
+  NONE
+  IMAGE
+  GIF
+  VIDEO
+}
+
+enum PublishStatus {
+  DRAFT
+  PUBLISHED
+  ARCHIVED
+}
+
+enum BodyRegion {
+  UPPER
+  LOWER
+  CORE
+  FULL_BODY
+}
+
+enum PlanDayType {
+  WORKOUT
+  REST
+}
+
+enum SetType {
+  NORMAL
+  WARMUP
+  DROP
+  FAILURE
+  AMRAP
+  BACKOFF
+}
+
+enum SessionStatus {
+  IN_PROGRESS
+  COMPLETED
+  ABANDONED
+}
+
+enum PrType {
+  MAX_WEIGHT
+  MAX_REPS
+  MAX_SET_VOLUME
+  MAX_SESSION_VOLUME
+  EST_ONE_RM
+  BEST_TIME
+  BEST_DISTANCE
+}
+
+enum GoalMetric {
+  EXERCISE_WEIGHT
+  EXERCISE_REPS
+  EXERCISE_ONE_RM
+  WORKOUTS_PER_WEEK
+  TOTAL_WORKOUTS
+  BODY_WEIGHT
+  BODY_FAT
+  TOTAL_VOLUME
+  CUSTOM
+}
+
+enum GoalStatus {
+  ACTIVE
+  ACHIEVED
+  PAUSED
+  ARCHIVED
+}
+
+enum PhotoPose {
+  FRONT
+  SIDE
+  BACK
+  OTHER
+}
+
+enum AchievementCategory {
+  MILESTONE
+  CONSISTENCY
+  STRENGTH
+  VOLUME
+  EXPLORATION
+}
+
+// ---------------------------------------------------------------------------
+// Identity & account
+// ---------------------------------------------------------------------------
+
+model User {
+  id           String @id @default(cuid())
+  email        String @unique
+  passwordHash String
+  name         String
+  role         Role   @default(USER)
+  avatarUrl    String?
+
+  // Preferences / onboarding
+  unit                UnitSystem       @default(KG)
+  goal                FitnessGoal?
+  experience          ExperienceLevel?
+  trainingDaysPerWeek Int?
+  heightCm            Decimal?         @db.Decimal(5, 1)
+  bodyWeightKg        Decimal?         @db.Decimal(6, 2)
+  dateOfBirth         DateTime?        @db.Date
+  timezone            String           @default("UTC")
+  weekStartsOn        Int              @default(1) // 0 = Sunday, 1 = Monday
+  onboardedAt         DateTime?
+
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  lastLoginAt DateTime?
+  deletedAt   DateTime?
+
+  refreshTokens       RefreshToken[]
+  passwordResetTokens PasswordResetToken[]
+  plans               WorkoutPlan[]
+  scheduleOverrides   ScheduleOverride[]
+  sessions            WorkoutSession[]
+  personalRecords     PersonalRecord[]
+  customExercises     Exercise[]           @relation("ExerciseAuthor")
+  goals               Goal[]
+  measurements        BodyMeasurement[]
+  progressPhotos      ProgressPhoto[]
+  achievements        UserAchievement[]
+  exerciseNotes       UserExerciseNote[]
+  notificationPrefs   NotificationPreference?
+  uploadedMedia       MediaAsset[]
+
+  @@index([deletedAt])
+}
+
+model RefreshToken {
+  id        String   @id @default(cuid())
+  userId    String
+  tokenHash String   @unique
+  family    String // rotation family, so a stolen token invalidates the chain
+  expiresAt DateTime
+  revokedAt DateTime?
+  userAgent String?
+  ip        String?
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([family])
+  @@index([expiresAt])
+}
+
+model PasswordResetToken {
+  id        String   @id @default(cuid())
+  userId    String
+  tokenHash String   @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model NotificationPreference {
+  id               String  @id @default(cuid())
+  userId           String  @unique
+  workoutReminder  Boolean @default(false)
+  reminderTime     String? // "18:30" in the user's timezone
+  upcomingWorkout  Boolean @default(true)
+  goalReminder     Boolean @default(true)
+  prNotification   Boolean @default(true)
+  streakReminder   Boolean @default(false)
+  emailEnabled     Boolean @default(false)
+  pushEnabled      Boolean @default(false)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+// ---------------------------------------------------------------------------
+// Exercise library taxonomy (admin-managed, extensible without code changes)
+// ---------------------------------------------------------------------------
+
+model MuscleGroup {
+  id         String     @id @default(cuid())
+  slug       String     @unique
+  name       String
+  bodyRegion BodyRegion
+  /// Optional parent, e.g. "Rear Delts" -> "Shoulders". Lets the library stay
+  /// extensible without inventing new top-level groups.
+  parentId   String?
+  colorHex   String     @default("#64748b")
+  sortOrder  Int        @default(0)
+  isActive   Boolean    @default(true)
+  createdAt  DateTime   @default(now())
+  updatedAt  DateTime   @updatedAt
+
+  parent   MuscleGroup?  @relation("MuscleGroupTree", fields: [parentId], references: [id], onDelete: SetNull)
+  children MuscleGroup[] @relation("MuscleGroupTree")
+
+  primaryForExercises   Exercise[]                @relation("PrimaryMuscle")
+  secondaryForExercises ExerciseSecondaryMuscle[]
+  planDays              PlanDayMuscleGroup[]
+  planExercises         PlanExercise[]
+  sessionMuscleGroups   SessionMuscleGroup[]
+  sessionExercises      SessionExercise[]
+
+  @@index([parentId])
+  @@index([sortOrder])
+}
+
+model Equipment {
+  id        String   @id @default(cuid())
+  slug      String   @unique
+  name      String
+  iconKey   String?
+  sortOrder Int      @default(0)
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  exercises Exercise[]
+
+  @@index([sortOrder])
+}
+
+model ExerciseCategory {
+  id          String   @id @default(cuid())
+  slug        String   @unique
+  name        String
+  description String?
+  sortOrder   Int      @default(0)
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  exercises Exercise[]
+
+  @@index([sortOrder])
+}
+
+model MediaAsset {
+  id            String    @id @default(cuid())
+  url           String
+  posterUrl     String?
+  type          MediaType
+  mimeType      String?
+  sizeBytes     Int?
+  width         Int?
+  height        Int?
+  durationMs    Int?
+  attribution   String?
+  license       String?
+  uploadedById  String?
+  createdAt     DateTime  @default(now())
+
+  uploadedBy User? @relation(fields: [uploadedById], references: [id], onDelete: SetNull)
+
+  exerciseMedia Exercise[] @relation("ExerciseMedia")
+
+  @@index([uploadedById])
+}
+
+model Exercise {
+  id          String  @id @default(cuid())
+  slug        String  @unique
+  name        String
+  description String?
+
+  categoryId      String?
+  primaryMuscleId String
+  equipmentId     String?
+
+  difficulty       Difficulty   @default(INTERMEDIATE)
+  mechanic         Mechanic     @default(UNKNOWN)
+  movementType     MovementType @default(OTHER)
+  trackingType     TrackingType @default(WEIGHT_REPS)
+  isUnilateral     Boolean      @default(false)
+  defaultRestSeconds Int        @default(90)
+
+  /// Instructional content lives on the exercise, never hardcoded in the UI.
+  instructions   String[] @default([])
+  commonMistakes String[] @default([])
+  tips           String[] @default([])
+  breathing      String?
+
+  /// Lightweight media fields let a card render instantly from a thumbnail and
+  /// lazily upgrade to a looping clip. `mediaAssetId` points at an admin upload.
+  thumbnailUrl     String?
+  mediaUrl         String?
+  mediaType        MediaType @default(NONE)
+  mediaAttribution String?
+  mediaAssetId     String?
+  /// Ordered key positions of the movement. Two or more frames are cross-faded
+  /// into a silent, auto-playing loop, which is how the public-domain seed
+  /// library gets a real demonstration without any licensed video.
+  frameUrls        String[]  @default([])
+
+  /// Search support: aliases ("bench", "bb bench") plus a normalised blob that
+  /// a pg_trgm index makes fast at thousands of rows.
+  aliases    String[] @default([])
+  searchText String   @default("")
+
+  status      PublishStatus @default(PUBLISHED)
+  isCustom    Boolean       @default(false)
+  createdById String?
+  popularity  Int           @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  category      ExerciseCategory? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  primaryMuscle MuscleGroup       @relation("PrimaryMuscle", fields: [primaryMuscleId], references: [id])
+  equipment     Equipment?        @relation(fields: [equipmentId], references: [id], onDelete: SetNull)
+  mediaAsset    MediaAsset?       @relation("ExerciseMedia", fields: [mediaAssetId], references: [id], onDelete: SetNull)
+  createdBy     User?             @relation("ExerciseAuthor", fields: [createdById], references: [id], onDelete: Cascade)
+
+  secondaryMuscles ExerciseSecondaryMuscle[]
+  planExercises    PlanExercise[]
+  sessionExercises SessionExercise[]
+  personalRecords  PersonalRecord[]
+  goals            Goal[]
+  userNotes        UserExerciseNote[]
+
+  @@index([primaryMuscleId])
+  @@index([equipmentId])
+  @@index([categoryId])
+  @@index([status])
+  @@index([createdById])
+  @@index([name])
+}
+
+model ExerciseSecondaryMuscle {
+  exerciseId    String
+  muscleGroupId String
+
+  exercise    Exercise    @relation(fields: [exerciseId], references: [id], onDelete: Cascade)
+  muscleGroup MuscleGroup @relation(fields: [muscleGroupId], references: [id], onDelete: Cascade)
+
+  @@id([exerciseId, muscleGroupId])
+  @@index([muscleGroupId])
+}
+
+/// Private, per-user notes about an exercise ("shoulder dislikes wide grip").
+model UserExerciseNote {
+  id         String   @id @default(cuid())
+  userId     String
+  exerciseId String
+  body       String
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  exercise Exercise @relation(fields: [exerciseId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, exerciseId])
+}
+
+// ---------------------------------------------------------------------------
+// The PLAN graph - what the user intends to do
+// ---------------------------------------------------------------------------
+
+model WorkoutPlan {
+  id          String  @id @default(cuid())
+  userId      String
+  name        String
+  description String?
+  /// Cycle length in days. 7 = classic weekly recurring schedule, but a 5- or
+  /// 10-day rotation works too.
+  cycleLength Int     @default(7)
+  /// Anchor date used to map a calendar date onto a cycle position when
+  /// cycleLength != 7.
+  startsOn    DateTime? @db.Date
+  isActive    Boolean   @default(false)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  archivedAt  DateTime?
+
+  user     User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  days     PlanDay[]
+  sessions WorkoutSession[]
+
+  @@unique([userId, name])
+  @@index([userId, isActive])
+}
+
+model PlanDay {
+  id     String @id @default(cuid())
+  planId String
+  /// 0-based position within the plan cycle. For a 7-day cycle this is the
+  /// weekday offset from the user's week start.
+  position Int
+  /// Free-text label. Defaults to the joined muscle group names but the user
+  /// can rename it to anything ("Heavy Push", "Arms Day").
+  label    String?
+  dayType  PlanDayType @default(WORKOUT)
+  notes    String?
+  estimatedMinutes Int?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  plan              WorkoutPlan          @relation(fields: [planId], references: [id], onDelete: Cascade)
+  muscleGroups      PlanDayMuscleGroup[]
+  exercises         PlanExercise[]
+  sessions          WorkoutSession[]
+  scheduleOverrides ScheduleOverride[]
+
+  @@unique([planId, position])
+  @@index([planId])
+}
+
+/// Join table - a day may reference zero, one, or many muscle groups.
+model PlanDayMuscleGroup {
+  id            String @id @default(cuid())
+  planDayId     String
+  muscleGroupId String
+  sortOrder     Int    @default(0)
+
+  planDay     PlanDay     @relation(fields: [planDayId], references: [id], onDelete: Cascade)
+  muscleGroup MuscleGroup @relation(fields: [muscleGroupId], references: [id], onDelete: Cascade)
+
+  @@unique([planDayId, muscleGroupId])
+  @@index([planDayId, sortOrder])
+}
+
+model PlanExercise {
+  id         String @id @default(cuid())
+  planDayId  String
+  exerciseId String
+  sortOrder  Int    @default(0)
+  /// Optional section grouping so a "Chest + Triceps" day can render its
+  /// exercises under each muscle group heading. Null = ungrouped.
+  muscleGroupId String?
+
+  // Targets - all optional. "4 sets of 8-10 at 60kg" is just one possibility.
+  targetSets        Int?
+  targetRepsMin     Int?
+  targetRepsMax     Int?
+  targetWeightKg    Decimal? @db.Decimal(7, 3)
+  targetTimeSeconds Int?
+  targetDistanceM   Decimal? @db.Decimal(9, 2)
+  targetRpe         Decimal? @db.Decimal(3, 1)
+  restSeconds       Int?
+  /// Overrides the exercise default when the user tracks it differently.
+  trackingType      TrackingType?
+  notes             String?
+  /// Exercises sharing a non-null key are performed as a superset/circuit.
+  supersetKey       String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  planDay     PlanDay      @relation(fields: [planDayId], references: [id], onDelete: Cascade)
+  exercise    Exercise     @relation(fields: [exerciseId], references: [id], onDelete: Restrict)
+  muscleGroup MuscleGroup? @relation(fields: [muscleGroupId], references: [id], onDelete: SetNull)
+
+  plannedSets      PlanSet[]
+  sessionExercises SessionExercise[]
+
+  @@index([planDayId, sortOrder])
+  @@index([exerciseId])
+}
+
+/// Optional per-set targets, for users who plan pyramids or ramp-ups.
+/// Absent rows simply mean "targetSets identical sets".
+model PlanSet {
+  id             String  @id @default(cuid())
+  planExerciseId String
+  setNumber      Int
+  setType        SetType @default(NORMAL)
+
+  targetReps        Int?
+  targetRepsMax     Int?
+  targetWeightKg    Decimal? @db.Decimal(7, 3)
+  targetTimeSeconds Int?
+  targetDistanceM   Decimal? @db.Decimal(9, 2)
+  targetRpe         Decimal? @db.Decimal(3, 1)
+  restSeconds       Int?
+  notes             String?
+
+  planExercise PlanExercise @relation(fields: [planExerciseId], references: [id], onDelete: Cascade)
+
+  @@unique([planExerciseId, setNumber])
+}
+
+/// Lets the user change one specific calendar date without touching the
+/// recurring plan: swap in another day, convert it to rest, or skip it.
+model ScheduleOverride {
+  id        String   @id @default(cuid())
+  userId    String
+  date      DateTime @db.Date
+  /// Null + isRest=false means "no workout scheduled" (explicitly cleared).
+  planDayId String?
+  isRest    Boolean  @default(false)
+  note      String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user    User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  planDay PlanDay? @relation(fields: [planDayId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, date])
+  @@index([userId, date])
+}
+
+// ---------------------------------------------------------------------------
+// The SESSION graph - what actually happened. Immutable history.
+// ---------------------------------------------------------------------------
+
+model WorkoutSession {
+  id        String @id @default(cuid())
+  userId    String
+  planId    String?
+  planDayId String?
+
+  /// Calendar date the workout belongs to, in the user's local timezone.
+  date   DateTime      @db.Date
+  /// Snapshot of the day label at the time of training.
+  title  String
+  status SessionStatus @default(IN_PROGRESS)
+
+  startedAt       DateTime  @default(now())
+  completedAt     DateTime?
+  durationSeconds Int?
+
+  notes   String?
+  feeling Int? // 1..5 self-reported
+
+  /// Display unit at log time; the stored numbers stay canonical kg.
+  unit UnitSystem @default(KG)
+
+  // Denormalised rollups, written on completion. Keeps dashboard + history fast.
+  totalVolumeKg Decimal @default(0) @db.Decimal(12, 3)
+  totalSets     Int     @default(0)
+  totalReps     Int     @default(0)
+  prCount       Int     @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user    User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  plan    WorkoutPlan? @relation(fields: [planId], references: [id], onDelete: SetNull)
+  planDay PlanDay?     @relation(fields: [planDayId], references: [id], onDelete: SetNull)
+
+  muscleGroups    SessionMuscleGroup[]
+  exercises       SessionExercise[]
+  personalRecords PersonalRecord[]
+
+  @@index([userId, date])
+  @@index([userId, status])
+  @@index([userId, completedAt])
+}
+
+model SessionMuscleGroup {
+  id            String @id @default(cuid())
+  sessionId     String
+  muscleGroupId String
+  sortOrder     Int    @default(0)
+  /// Snapshot so history still reads correctly if a group is later renamed.
+  nameSnapshot  String
+
+  session     WorkoutSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  muscleGroup MuscleGroup    @relation(fields: [muscleGroupId], references: [id], onDelete: Cascade)
+
+  @@unique([sessionId, muscleGroupId])
+}
+
+model SessionExercise {
+  id             String  @id @default(cuid())
+  sessionId      String
+  exerciseId     String
+  /// Soft link back to the plan row this came from, for "planned vs actual".
+  planExerciseId String?
+  muscleGroupId  String?
+  sortOrder      Int     @default(0)
+
+  /// Snapshots - history must stay readable even if the library row changes.
+  nameSnapshot     String
+  trackingType     TrackingType @default(WEIGHT_REPS)
+  targetSets       Int?
+  targetRepsMin    Int?
+  targetRepsMax    Int?
+  targetWeightKg   Decimal?     @db.Decimal(7, 3)
+  restSeconds      Int?
+
+  notes       String?
+  isSkipped   Boolean   @default(false)
+  completedAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  session      WorkoutSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  exercise     Exercise       @relation(fields: [exerciseId], references: [id], onDelete: Restrict)
+  planExercise PlanExercise?  @relation(fields: [planExerciseId], references: [id], onDelete: SetNull)
+  muscleGroup  MuscleGroup?   @relation(fields: [muscleGroupId], references: [id], onDelete: SetNull)
+
+  sets SessionSet[]
+
+  @@index([sessionId, sortOrder])
+  @@index([exerciseId])
+}
+
+/// One independently editable set. Weight, reps, time and distance all live
+/// here per-set - never assume sets within an exercise match each other.
+model SessionSet {
+  id                String  @id @default(cuid())
+  sessionExerciseId String
+  setNumber         Int
+  setType           SetType @default(NORMAL)
+
+  weightKg   Decimal? @db.Decimal(7, 3)
+  reps       Int?
+  timeSeconds Int?
+  distanceM  Decimal? @db.Decimal(9, 2)
+  rpe        Decimal? @db.Decimal(3, 1)
+
+  isCompleted Boolean   @default(false)
+  completedAt DateTime?
+  notes       String?
+
+  /// Precomputed so volume/1RM charts never need to recalculate across
+  /// thousands of rows. Warmup sets are excluded from volume at write time.
+  volumeKg        Decimal? @db.Decimal(10, 3)
+  estimatedOneRmKg Decimal? @db.Decimal(7, 3)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  sessionExercise SessionExercise  @relation(fields: [sessionExerciseId], references: [id], onDelete: Cascade)
+  personalRecords PersonalRecord[]
+
+  @@unique([sessionExerciseId, setNumber])
+  @@index([sessionExerciseId])
+}
+
+// ---------------------------------------------------------------------------
+// Progress, records & goals
+// ---------------------------------------------------------------------------
+
+model PersonalRecord {
+  id         String @id @default(cuid())
+  userId     String
+  exerciseId String
+  type       PrType
+
+  /// Canonical magnitude for the record type (kg, reps, seconds or metres).
+  value         Decimal  @db.Decimal(12, 3)
+  previousValue Decimal? @db.Decimal(12, 3)
+  /// Context so the UI can render "65kg x 8" rather than a bare number.
+  weightKg      Decimal? @db.Decimal(7, 3)
+  reps          Int?
+  timeSeconds   Int?
+
+  achievedAt   DateTime
+  sessionId    String?
+  sessionSetId String?
+
+  createdAt DateTime @default(now())
+
+  user       User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  exercise   Exercise        @relation(fields: [exerciseId], references: [id], onDelete: Cascade)
+  session    WorkoutSession? @relation(fields: [sessionId], references: [id], onDelete: SetNull)
+  sessionSet SessionSet?     @relation(fields: [sessionSetId], references: [id], onDelete: SetNull)
+
+  @@index([userId, exerciseId, type])
+  @@index([userId, achievedAt])
+}
+
+model Goal {
+  id         String     @id @default(cuid())
+  userId     String
+  title      String
+  metric     GoalMetric
+  exerciseId String?
+
+  targetValue  Decimal  @db.Decimal(12, 3)
+  startValue   Decimal? @db.Decimal(12, 3)
+  currentValue Decimal  @default(0) @db.Decimal(12, 3)
+  unitLabel    String? // "kg", "reps", "workouts/week"
+  deadline     DateTime? @db.Date
+  status       GoalStatus @default(ACTIVE)
+  notes        String?
+
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  achievedAt  DateTime?
+
+  user     User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  exercise Exercise? @relation(fields: [exerciseId], references: [id], onDelete: SetNull)
+
+  @@index([userId, status])
+}
+
+model BodyMeasurement {
+  id         String   @id @default(cuid())
+  userId     String
+  measuredOn DateTime @db.Date
+
+  bodyWeightKg Decimal? @db.Decimal(6, 2)
+  bodyFatPct   Decimal? @db.Decimal(4, 1)
+  neckCm       Decimal? @db.Decimal(5, 1)
+  shouldersCm  Decimal? @db.Decimal(5, 1)
+  chestCm      Decimal? @db.Decimal(5, 1)
+  waistCm      Decimal? @db.Decimal(5, 1)
+  hipsCm       Decimal? @db.Decimal(5, 1)
+  leftArmCm    Decimal? @db.Decimal(5, 1)
+  rightArmCm   Decimal? @db.Decimal(5, 1)
+  leftThighCm  Decimal? @db.Decimal(5, 1)
+  rightThighCm Decimal? @db.Decimal(5, 1)
+  leftCalfCm   Decimal? @db.Decimal(5, 1)
+  rightCalfCm  Decimal? @db.Decimal(5, 1)
+  /// Open-ended extras so users can track anything else they care about.
+  custom       Json?
+  notes        String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, measuredOn])
+  @@index([userId, measuredOn])
+}
+
+model ProgressPhoto {
+  id           String    @id @default(cuid())
+  userId       String
+  takenOn      DateTime  @db.Date
+  url          String
+  pose         PhotoPose @default(FRONT)
+  bodyWeightKg Decimal?  @db.Decimal(6, 2)
+  notes        String?
+  createdAt    DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, takenOn])
+}
+
+model Achievement {
+  id          String              @id @default(cuid())
+  slug        String              @unique
+  name        String
+  description String
+  iconKey     String?
+  category    AchievementCategory @default(MILESTONE)
+  /// Numeric trigger, interpreted against `metric` (e.g. metric="workouts",
+  /// threshold=50). New achievements are pure data, no code change needed.
+  metric      String
+  threshold   Int
+  sortOrder   Int                 @default(0)
+  isActive    Boolean             @default(true)
+  createdAt   DateTime            @default(now())
+
+  users UserAchievement[]
+
+  @@index([category, sortOrder])
+}
+
+model UserAchievement {
+  id            String   @id @default(cuid())
+  userId        String
+  achievementId String
+  progress      Int      @default(0)
+  unlockedAt    DateTime?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  user        User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  achievement Achievement @relation(fields: [achievementId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, achievementId])
+  @@index([userId, unlockedAt])
+}
+
+// ---------------------------------------------------------------------------
+// Starting-point templates. Copied into a real, fully editable WorkoutPlan.
+// ---------------------------------------------------------------------------
+
+model PlanTemplate {
+  id          String           @id @default(cuid())
+  slug        String           @unique
+  name        String
+  description String
+  goal        FitnessGoal?
+  difficulty  Difficulty       @default(BEGINNER)
+  daysPerWeek Int
+  cycleLength Int              @default(7)
+  /// Day/muscle-group/exercise structure, resolved against exercise slugs on
+  /// copy so templates survive library changes.
+  structure   Json
+  sortOrder   Int              @default(0)
+  status      PublishStatus    @default(PUBLISHED)
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+
+  @@index([status, sortOrder])
+}
