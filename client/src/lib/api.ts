@@ -166,6 +166,33 @@ export async function apiForm<T>(path: string, form: FormData): Promise<T> {
   throw new ApiError(response.status, error?.code ?? 'UNKNOWN', error?.message ?? 'Upload failed.');
 }
 
+/**
+ * Downloads a file through the same authenticated fetch path as everything
+ * else, then hands it to the browser. A plain `<a download>` would not carry
+ * the auth cookie refresh behaviour or surface server errors.
+ */
+export async function apiDownload(path: string, query?: RequestOptions['query']): Promise<void> {
+  const response = await fetch(buildUrl(path, query), { credentials: 'include' });
+  if (!response.ok) {
+    const payload = await response.json().catch(() => null);
+    const error = (payload as { error?: { code?: string; message?: string } } | null)?.error;
+    throw new ApiError(response.status, error?.code ?? 'UNKNOWN', error?.message ?? 'Download failed.');
+  }
+
+  // Prefer the server's filename; it already carries the export date.
+  const disposition = response.headers.get('content-disposition') ?? '';
+  const match = /filename="?([^";]+)"?/.exec(disposition);
+  const blob = await response.blob();
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = match?.[1] ?? 'forge-export';
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+}
+
 /** Turns an unknown thrown value into copy that is safe to show a user. */
 export function errorMessage(err: unknown, fallback = 'Something went wrong. Please try again.') {
   if (err instanceof ApiError) return err.message;

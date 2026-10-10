@@ -29,6 +29,7 @@ export const sessionExerciseSelect = {
   targetRepsMax: true,
   targetWeightKg: true,
   restSeconds: true,
+  supersetKey: true,
   notes: true,
   isSkipped: true,
   completedAt: true,

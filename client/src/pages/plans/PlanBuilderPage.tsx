@@ -22,11 +22,13 @@ import {
   Copy,
   Dumbbell,
   GripVertical,
+  Link2,
   Moon,
   MoreHorizontal,
   Plus,
   Settings2,
   Trash2,
+  Unlink,
   X,
 } from 'lucide-react';
 import { api, errorMessage, fieldErrors } from '@/lib/api';
@@ -58,6 +60,29 @@ const WEEKDAY_NAMES = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', '
 function refreshPlan(qc: ReturnType<typeof useQueryClient>, planId: string) {
   void qc.invalidateQueries({ queryKey: qk.plan(planId) });
   void qc.invalidateQueries({ queryKey: ['sessions'] });
+}
+
+/**
+ * Supersets read the way lifters write them: A1/A2, B1/B2. Letters follow the
+ * order groups appear in the day; a group of one is not a superset.
+ */
+function supersetLabelsFor(exercises: Array<{ id: string; supersetKey: string | null }>): Record<string, string> {
+  const letters = new Map<string, string>();
+  const counts = new Map<string, number>();
+  const labels: Record<string, string> = {};
+
+  for (const exercise of exercises) {
+    const key = exercise.supersetKey;
+    if (!key) continue;
+    if (!letters.has(key)) letters.set(key, String.fromCharCode(65 + letters.size));
+    const position = (counts.get(key) ?? 0) + 1;
+    counts.set(key, position);
+    labels[exercise.id] = `${letters.get(key)}${position}`;
+  }
+  for (const exercise of exercises) {
+    if (exercise.supersetKey && counts.get(exercise.supersetKey) === 1) delete labels[exercise.id];
+  }
+  return labels;
 }
 
 function dayTitle(position: number, cycleLength: number) {
@@ -462,16 +487,42 @@ function ExerciseConfigDialog({
 function ExerciseRow({
   planExercise,
   planId,
+  previous,
+  supersetLabel,
   onConfigure,
 }: {
   planExercise: PlanExercise;
   planId: string;
+  /** The row above - supersets are built by joining upwards. */
+  previous: PlanExercise | null;
+  supersetLabel: string | null;
   onConfigure: () => void;
 }) {
   const unit = useUnit();
   const queryClient = useQueryClient();
   const [menuOpen, setMenuOpen] = useState(false);
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: planExercise.id });
+
+  const setSuperset = useMutation({
+    mutationFn: (supersetKey: string | null) =>
+      api.patch(`/plans/exercises/${planExercise.id}`, { supersetKey }),
+    onSuccess: () => refreshPlan(queryClient, planId),
+    onError: (err) => toast.error(errorMessage(err)),
+  });
+
+  // Joining the row above either extends its existing group or starts a new one.
+  const joinPrevious = () => {
+    if (!previous) return;
+    const key = previous.supersetKey ?? `ss-${previous.id.slice(-8)}`;
+    if (!previous.supersetKey) {
+      api
+        .patch(`/plans/exercises/${previous.id}`, { supersetKey: key })
+        .then(() => setSuperset.mutate(key))
+        .catch((err) => toast.error(errorMessage(err)));
+      return;
+    }
+    setSuperset.mutate(key);
+  };
 
   const remove = useMutation({
     mutationFn: () => api.delete(`/plans/exercises/${planExercise.id}`),
@@ -521,8 +572,11 @@ function ExerciseRow({
       <ExerciseMedia media={planExercise.exercise.media} name={planExercise.exercise.name} mode="thumb" className="size-11 shrink-0" />
 
       <div className="min-w-0 flex-1">
-        <p className="truncate text-sm font-medium text-text">
-          <Link to={`/app/exercises/${planExercise.exercise.slug}`} className="hover:text-accent" onClick={(e) => e.stopPropagation()}>
+        <p className="flex items-center gap-1.5 truncate text-sm font-medium text-text">
+          {supersetLabel ? (
+            <Badge size="sm" tone="accent" title="Superset - performed back-to-back">{supersetLabel}</Badge>
+          ) : null}
+          <Link to={`/app/exercises/${planExercise.exercise.slug}`} className="truncate hover:text-accent" onClick={(e) => e.stopPropagation()}>
             {planExercise.exercise.name}
           </Link>
         </p>
@@ -554,6 +608,23 @@ function ExerciseRow({
                 >
                   <Copy className="size-4" aria-hidden /> Duplicate
                 </button>
+                {planExercise.supersetKey ? (
+                  <button
+                    type="button"
+                    className="flex w-full items-center gap-2.5 px-3 py-2.5 text-sm text-text-muted hover:bg-surface-hover hover:text-text"
+                    onClick={() => { setMenuOpen(false); setSuperset.mutate(null); }}
+                  >
+                    <Unlink className="size-4" aria-hidden /> Leave superset
+                  </button>
+                ) : previous ? (
+                  <button
+                    type="button"
+                    className="flex w-full items-center gap-2.5 px-3 py-2.5 text-sm text-text-muted hover:bg-surface-hover hover:text-text"
+                    onClick={() => { setMenuOpen(false); joinPrevious(); }}
+                  >
+                    <Link2 className="size-4" aria-hidden /> Superset with above
+                  </button>
+                ) : null}
                 <button
                   type="button"
                   className="flex w-full items-center gap-2.5 border-t border-border px-3 py-2.5 text-sm text-text-muted hover:bg-surface-hover hover:text-danger"
@@ -682,6 +753,8 @@ function DayEditor({ day, planId }: { day: PlanDay; planId: string }) {
     return [...ordered, ...missing];
   }, [day.exercises, exerciseIds]);
 
+  const supersetLabels = useMemo(() => supersetLabelsFor(exercises), [exercises]);
+
   const sensors = useSensors(
     // Distance constraint keeps vertical scrolling working on touch.
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
@@ -756,11 +829,13 @@ function DayEditor({ day, planId }: { day: PlanDay; planId: string }) {
             <DndContext sensors={sensors} collisionDetection={closestCenter} modifiers={[restrictToVerticalAxis]} onDragEnd={handleDragEnd}>
               <SortableContext items={exercises.map((e) => e.id)} strategy={verticalListSortingStrategy}>
                 <ul className="space-y-2" aria-label={`${day.displayLabel} exercises`}>
-                  {exercises.map((pe) => (
+                  {exercises.map((pe, index) => (
                     <ExerciseRow
                       key={pe.id}
                       planExercise={pe}
                       planId={planId}
+                      previous={index > 0 ? exercises[index - 1] ?? null : null}
+                      supersetLabel={supersetLabels[pe.id] ?? null}
                       onConfigure={() => setConfiguring(pe)}
                     />
                   ))}

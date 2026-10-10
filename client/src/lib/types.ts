@@ -5,6 +5,7 @@ import type { Unit } from './units';
 export type Role = 'USER' | 'ADMIN';
 export type FitnessGoal = 'BUILD_MUSCLE' | 'STRENGTH' | 'FAT_LOSS' | 'GENERAL_FITNESS' | 'CUSTOM';
 export type ExperienceLevel = 'BEGINNER' | 'INTERMEDIATE' | 'ADVANCED';
+export type Sex = 'MALE' | 'FEMALE' | 'OTHER' | 'PREFER_NOT_TO_SAY';
 export type Difficulty = 'BEGINNER' | 'INTERMEDIATE' | 'ADVANCED';
 export type Mechanic = 'COMPOUND' | 'ISOLATION' | 'UNKNOWN';
 export type MediaType = 'NONE' | 'IMAGE' | 'GIF' | 'VIDEO';
@@ -59,6 +60,7 @@ export type User = {
   heightCm: number | null;
   bodyWeightKg: number | null;
   dateOfBirth: string | null;
+  sex: Sex | null;
   timezone: string;
   weekStartsOn: number;
   onboardedAt: string | null;
@@ -244,6 +246,7 @@ export type SessionExercise = {
   targetRepsMax: number | null;
   targetWeightKg: number | null;
   restSeconds: number | null;
+  supersetKey: string | null;
   notes: string | null;
   isSkipped: boolean;
   completedAt: string | null;
@@ -304,6 +307,22 @@ export type WorkoutSession = {
     volumeKg: number;
   };
   previousPerformance: Record<string, PreviousPerformance>;
+  /** Double-progression advice, keyed by session exercise id. */
+  progression: Record<string, ProgressionHint>;
+};
+
+/**
+ * Advice, not a rule: work up the rep range at one weight, then add load.
+ * Numbers arrive in kg so the client can phrase it in the user's unit.
+ */
+export type ProgressionHint = {
+  kind: 'ADD_WEIGHT' | 'ADD_REPS' | 'REPEAT' | 'BASELINE';
+  fromWeightKg: number | null;
+  fromReps: number | null;
+  suggestedWeightKg: number | null;
+  suggestedReps: number | null;
+  targetRepsMin: number | null;
+  targetRepsMax: number | null;
 };
 
 export type SessionListItem = {

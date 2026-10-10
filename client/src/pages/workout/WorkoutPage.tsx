@@ -18,6 +18,31 @@ import { ConfirmDialog } from '@/components/ui/Dialog';
 import { ErrorState, PageLoader } from '@/components/ui/States';
 import { formatWeight } from '@/lib/units';
 
+/**
+ * Supersets are shown the way people write them down: A1/A2, B1/B2. Groups are
+ * lettered in the order they appear, members numbered within the group.
+ */
+function supersetLabelsFor(exercises: WorkoutSession['exercises']): Record<string, string> {
+  const letters = new Map<string, string>();
+  const counts = new Map<string, number>();
+  const labels: Record<string, string> = {};
+
+  for (const exercise of exercises) {
+    const key = exercise.supersetKey;
+    if (!key) continue;
+    if (!letters.has(key)) letters.set(key, String.fromCharCode(65 + letters.size));
+    const position = (counts.get(key) ?? 0) + 1;
+    counts.set(key, position);
+    labels[exercise.id] = `${letters.get(key)}${position}`;
+  }
+
+  // A "group" of one is just an exercise - don't badge it.
+  for (const exercise of exercises) {
+    if (exercise.supersetKey && counts.get(exercise.supersetKey) === 1) delete labels[exercise.id];
+  }
+  return labels;
+}
+
 /** Elapsed clock in the header - whole-session, not per-set. */
 function ElapsedTime({ startedAt }: { startedAt: string }) {
   const [seconds, setSeconds] = useState(() => Math.max(0, Math.round((Date.now() - new Date(startedAt).getTime()) / 1000)));
@@ -118,6 +143,7 @@ export default function WorkoutPage() {
   }
 
   const firstIncomplete = session.exercises.find((e) => !e.progress.isComplete && !e.isSkipped)?.id;
+  const supersetLabels = supersetLabelsFor(session.exercises);
 
   return (
     <RestTimerProvider>
@@ -190,6 +216,8 @@ export default function WorkoutPage() {
                 exercise={exercise}
                 unit={unit}
                 previous={session.previousPerformance[exercise.exercise.id]}
+                progression={session.progression?.[exercise.id]}
+                supersetLabel={supersetLabels[exercise.id]}
                 isCurrent={exercise.id === firstIncomplete}
               />
             </motion.section>

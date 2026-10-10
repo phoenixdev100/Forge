@@ -4,11 +4,12 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { ArrowLeft, ArrowRight, Check } from 'lucide-react';
 import { api } from '@/lib/api';
 import { cn } from '@/lib/cn';
-import type { ExperienceLevel, FitnessGoal, User } from '@/lib/types';
-import type { Unit } from '@/lib/units';
+import type { ExperienceLevel, FitnessGoal, Sex, User } from '@/lib/types';
+import { fromCm, fromKg, lengthLabel, toCm, toKg, unitLabel, type Unit } from '@/lib/units';
 import { useAuth } from '@/providers/AuthProvider';
 import { Logo } from '@/components/Logo';
 import { Button } from '@/components/ui/Button';
+import { Input } from '@/components/ui/Input';
 import { ErrorState } from '@/components/ui/States';
 
 /**
@@ -31,6 +32,13 @@ const EXPERIENCE: Array<{ value: ExperienceLevel; title: string; body: string }>
 ];
 
 const DAYS = [2, 3, 4, 5, 6];
+
+const SEXES: Array<{ value: Sex; label: string }> = [
+  { value: 'MALE', label: 'Male' },
+  { value: 'FEMALE', label: 'Female' },
+  { value: 'OTHER', label: 'Other' },
+  { value: 'PREFER_NOT_TO_SAY', label: 'Rather not say' },
+];
 
 function OptionCard({
   selected,
@@ -92,10 +100,23 @@ export default function OnboardingPage() {
   const [experience, setExperience] = useState<ExperienceLevel | null>(null);
   const [daysPerWeek, setDaysPerWeek] = useState<number | null>(null);
   const [unit, setUnit] = useState<Unit>(user?.unit ?? 'KG');
+  const [sex, setSex] = useState<Sex | null>(user?.sex ?? null);
+  const [height, setHeight] = useState(
+    user?.heightCm != null ? String(fromCm(user.heightCm, user.unit)) : '',
+  );
+  const [weight, setWeight] = useState(
+    user?.bodyWeightKg != null ? String(fromKg(user.bodyWeightKg, user.unit)) : '',
+  );
+  const [dob, setDob] = useState(user?.dateOfBirth ?? '');
   const [error, setError] = useState<unknown>(null);
   const [isSaving, setIsSaving] = useState(false);
 
-  const steps = ['What are you training for?', 'How experienced are you?', 'How often will you train?'];
+  const steps = [
+    'What are you training for?',
+    'How experienced are you?',
+    'How often will you train?',
+    'A bit about you',
+  ];
   const isLast = step === steps.length - 1;
 
   async function finish(body: Record<string, unknown> | 'skip') {
@@ -115,15 +136,23 @@ export default function OnboardingPage() {
     }
   }
 
-  const submit = () =>
-    finish({
+  const submit = () => {
+    const heightValue = Number(height);
+    const weightValue = Number(weight);
+    return finish({
       goal,
       experience,
       trainingDaysPerWeek: daysPerWeek,
       unit,
+      sex,
+      // Blank stays blank - every field here is optional.
+      heightCm: height.trim() && heightValue > 0 ? toCm(heightValue, unit) : null,
+      bodyWeightKg: weight.trim() && weightValue > 0 ? toKg(weightValue, unit) : null,
+      dateOfBirth: dob || null,
       weekStartsOn: 1,
       timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
     });
+  };
 
   return (
     <div className="flex min-h-dvh flex-col bg-bg px-5 py-8">
@@ -159,7 +188,9 @@ export default function OnboardingPage() {
             ? 'This shapes your dashboard. You can change it later.'
             : step === 1
               ? 'So suggestions match where you actually are.'
-              : 'Rest days count toward your streak - training is the plan, not a punishment.'}
+              : step === 2
+                ? 'Rest days count toward your streak - training is the plan, not a punishment.'
+                : 'All optional, all editable later. It only powers your profile page and body-weight tracking.'}
         </p>
 
         {error ? <div className="mt-6"><ErrorState error={error} compact /></div> : null}
@@ -184,7 +215,7 @@ export default function OnboardingPage() {
                   />
                 ))}
               </StepShell>
-            ) : (
+            ) : step === 2 ? (
               <StepShell key="schedule">
                 <div>
                   <p className="mb-2 text-sm font-medium text-text">Days per week</p>
@@ -232,6 +263,60 @@ export default function OnboardingPage() {
                     Switchable any time - history stays correct either way.
                   </p>
                 </div>
+              </StepShell>
+            ) : (
+              <StepShell key="body">
+                <div>
+                  <p className="mb-2 text-sm font-medium text-text">Sex</p>
+                  <div className="grid grid-cols-2 gap-2">
+                    {SEXES.map((s) => (
+                      <button
+                        key={s.value}
+                        type="button"
+                        onClick={() => setSex(sex === s.value ? null : s.value)}
+                        aria-pressed={sex === s.value}
+                        className={cn(
+                          'h-11 rounded-[var(--radius-control)] border text-sm font-medium transition-colors',
+                          sex === s.value
+                            ? 'border-accent bg-accent-soft text-accent'
+                            : 'border-border bg-surface text-text hover:border-border-strong',
+                        )}
+                      >
+                        {s.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 gap-2 pt-2 sm:grid-cols-2">
+                  <Input
+                    label={`Height (${lengthLabel(unit)})`}
+                    type="number"
+                    inputMode="decimal"
+                    step="0.1"
+                    value={height}
+                    onChange={(e) => setHeight(e.target.value)}
+                    placeholder={unit === 'LB' ? '70' : '178'}
+                  />
+                  <Input
+                    label={`Body weight (${unitLabel(unit)})`}
+                    type="number"
+                    inputMode="decimal"
+                    step="0.1"
+                    value={weight}
+                    onChange={(e) => setWeight(e.target.value)}
+                    placeholder={unit === 'LB' ? '165' : '75'}
+                  />
+                </div>
+
+                <Input
+                  label="Date of birth"
+                  type="date"
+                  value={dob}
+                  max={new Date().toISOString().slice(0, 10)}
+                  onChange={(e) => setDob(e.target.value)}
+                  hint="Only used to show your age on your profile."
+                />
               </StepShell>
             )}
           </AnimatePresence>

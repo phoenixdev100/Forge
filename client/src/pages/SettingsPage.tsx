@@ -1,15 +1,26 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useMutation } from '@tanstack/react-query';
-import { KeyRound, LogOut, Monitor, Moon, ShieldAlert, Sun, User as UserIcon } from 'lucide-react';
-import { api, errorMessage, fieldErrors } from '@/lib/api';
+import {
+  Download,
+  FileJson,
+  FileSpreadsheet,
+  KeyRound,
+  LogOut,
+  Monitor,
+  Moon,
+  ShieldAlert,
+  Sun,
+  User as UserIcon,
+} from 'lucide-react';
+import { api, apiDownload, errorMessage, fieldErrors } from '@/lib/api';
 import { cn } from '@/lib/cn';
 import type { User } from '@/lib/types';
 import { toast } from 'sonner';
 import { useAuth } from '@/providers/AuthProvider';
 import { useTheme } from '@/providers/ThemeProvider';
 import { PageHeader } from '@/components/layout/AppShell';
-import { Button } from '@/components/ui/Button';
+import { Button, ButtonLink } from '@/components/ui/Button';
 import { Card, CardBody, CardHeader } from '@/components/ui/Card';
 import { ConfirmDialog } from '@/components/ui/Dialog';
 import { Input, Select } from '@/components/ui/Input';
@@ -45,6 +56,21 @@ export default function SettingsPage() {
   // Danger
   const [logoutAllOpen, setLogoutAllOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
+
+  // Export
+  const [exporting, setExporting] = useState<'json' | 'csv' | null>(null);
+
+  async function download(format: 'json' | 'csv') {
+    setExporting(format);
+    try {
+      await apiDownload('/users/me/export', { format });
+      toast.success(format === 'csv' ? 'Set-by-set CSV downloaded.' : 'Full archive downloaded.');
+    } catch (err) {
+      toast.error(errorMessage(err, 'Export failed. Please try again.'));
+    } finally {
+      setExporting(null);
+    }
+  }
 
   const saveProfile = useMutation({
     mutationFn: () =>
@@ -100,7 +126,15 @@ export default function SettingsPage() {
 
   return (
     <div>
-      <PageHeader title="Settings" description={user.email} />
+      <PageHeader
+        title="Settings"
+        description={user.email}
+        action={
+          <ButtonLink variant="secondary" size="sm" to="/app/profile" leftIcon={<UserIcon className="size-4" />}>
+            Your profile
+          </ButtonLink>
+        }
+      />
 
       <div className="grid items-start gap-5 lg:grid-cols-2">
         {/* Columns flatten on mobile (contents) so DOM order can differ from visual order */}
@@ -145,6 +179,37 @@ export default function SettingsPage() {
             <div className="flex justify-end">
               <Button size="sm" onClick={() => saveProfile.mutate()} isLoading={saveProfile.isPending} disabled={!name.trim()}>
                 Save profile
+              </Button>
+            </div>
+          </CardBody>
+        </Card>
+
+        {/* Data ownership - an export that outlives this app */}
+        <Card>
+          <CardHeader title="Your data" icon={<Download className="size-4" />} />
+          <CardBody className="space-y-3 pt-4">
+            <p className="text-sm text-text-muted">
+              Download everything you have logged - plans, every set, records, goals and measurements. No account
+              required to read it afterwards.
+            </p>
+            <div className="flex flex-wrap gap-2">
+              <Button
+                variant="secondary"
+                size="sm"
+                isLoading={exporting === 'json'}
+                onClick={() => void download('json')}
+                leftIcon={<FileJson className="size-4" />}
+              >
+                Full archive (JSON)
+              </Button>
+              <Button
+                variant="secondary"
+                size="sm"
+                isLoading={exporting === 'csv'}
+                onClick={() => void download('csv')}
+                leftIcon={<FileSpreadsheet className="size-4" />}
+              >
+                Every set (CSV)
               </Button>
             </div>
           </CardBody>

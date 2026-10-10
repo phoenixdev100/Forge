@@ -4,7 +4,8 @@ import { currentUser } from '../../middleware/auth.js';
 import { validate } from '../../middleware/validate.js';
 import { parseIsoDate } from '../../lib/dates.js';
 import { serializeUser } from './users.serializer.js';
-import { notificationPrefsSchema, onboardingSchema, updateProfileSchema } from './users.schemas.js';
+import { buildExport, buildSetsCsv } from './users.export.js';
+import { exportQuerySchema, notificationPrefsSchema, onboardingSchema, updateProfileSchema } from './users.schemas.js';
 
 const router = Router();
 
@@ -32,9 +33,14 @@ router.patch('/me', validate({ body: updateProfileSchema }), async (req, res) =>
 
 /** Completing onboarding stamps `onboardedAt`; the client can also skip it. */
 router.post('/me/onboarding', validate({ body: onboardingSchema }), async (req, res) => {
+  const { dateOfBirth, ...rest } = req.body;
   const user = await prisma.user.update({
     where: { id: currentUser(req).id },
-    data: { ...definedOnly(req.body), onboardedAt: new Date() },
+    data: {
+      ...definedOnly(rest),
+      ...(dateOfBirth === undefined ? {} : { dateOfBirth: dateOfBirth ? parseIsoDate(dateOfBirth) : null }),
+      onboardedAt: new Date(),
+    },
   });
   res.json({ user: serializeUser(user) });
 });
@@ -66,6 +72,26 @@ router.patch('/me/notifications', validate({ body: notificationPrefsSchema }), a
     update: data,
   });
   res.json({ preferences: prefs });
+});
+
+/**
+ * Your data is yours. One request returns everything you ever logged, in a
+ * format that outlives this app.
+ */
+router.get('/me/export', validate({ query: exportQuerySchema }), async (req, res) => {
+  const userId = currentUser(req).id;
+  const stamp = new Date().toISOString().slice(0, 10);
+
+  if ((req.query as { format?: string }).format === 'csv') {
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="forge-sets-${stamp}.csv"`);
+    res.send(await buildSetsCsv(userId));
+    return;
+  }
+
+  res.setHeader('Content-Type', 'application/json; charset=utf-8');
+  res.setHeader('Content-Disposition', `attachment; filename="forge-export-${stamp}.json"`);
+  res.send(JSON.stringify(await buildExport(userId), null, 2));
 });
 
 /**

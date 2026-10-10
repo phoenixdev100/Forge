@@ -16,6 +16,7 @@ export function serializeUser(user: UserModel) {
     heightCm: num(user.heightCm),
     bodyWeightKg: num(user.bodyWeightKg),
     dateOfBirth: dateOnly(user.dateOfBirth),
+    sex: user.sex,
     timezone: user.timezone,
     weekStartsOn: user.weekStartsOn,
     onboardedAt: iso(user.onboardedAt),

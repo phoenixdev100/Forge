@@ -47,6 +47,17 @@ export const addSessionExerciseSchema = z.object({
   notes: z.string().trim().max(600).nullish(),
 });
 
+/**
+ * Swap the exercise being performed in a slot - the machine was taken, or the
+ * shoulder is complaining. The slot (and its plan link) survives; only the
+ * exercise and its snapshots change.
+ */
+export const swapSessionExerciseSchema = z.object({
+  exerciseId: z.string().min(1, 'Pick an exercise.'),
+  /** Carry the planned set count over; off means start from one blank set. */
+  keepSets: z.boolean().default(true),
+});
+
 export const updateSessionExerciseSchema = z
   .object({
     notes: z.string().trim().max(600).nullish(),

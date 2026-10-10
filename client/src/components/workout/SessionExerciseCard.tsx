@@ -1,6 +1,18 @@
 import { useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { Check, ChevronDown, ChevronUp, History, Plus, SkipForward, Trash2, X } from 'lucide-react';
+import {
+  ArrowUpRight,
+  Check,
+  ChevronDown,
+  ChevronUp,
+  History,
+  Plus,
+  Repeat,
+  SkipForward,
+  Trash2,
+  Weight,
+  X,
+} from 'lucide-react';
 import { api, errorMessage } from '@/lib/api';
 import { cn } from '@/lib/cn';
 import { formatDate, formatRepRange } from '@/lib/format';
@@ -16,13 +28,15 @@ import {
   weightFieldLabel,
   weightIsOptional,
 } from '@/lib/tracking';
-import type { SessionExercise, SessionSet, WorkoutSession } from '@/lib/types';
+import type { Exercise, ProgressionHint, SessionExercise, SessionSet, WorkoutSession } from '@/lib/types';
 import { formatWeight, fromKg, plateStep, toKg, unitLabel, type Unit } from '@/lib/units';
 import { toast } from 'sonner';
 import { ExerciseMedia } from '@/components/ExerciseMedia';
+import { ExercisePicker } from '@/components/ExercisePicker';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { Stepper } from '@/components/ui/Stepper';
+import { PlateCalculator } from './PlateCalculator';
 import { useRestTimer } from './RestTimer';
 
 type SetUpdate = Partial<Pick<SessionSet, 'reps' | 'timeSeconds' | 'distanceM' | 'rpe' | 'notes' | 'isCompleted' | 'setType'> & { weightKg: number | null }>;
@@ -226,6 +240,43 @@ function SetRow({
 }
 
 /* ------------------------------------------------------------------ */
+/* Double progression: advice phrased in the user's own unit            */
+/* ------------------------------------------------------------------ */
+
+function progressionText(hint: ProgressionHint, unit: Unit): string | null {
+  const weight = (kg: number | null) => (kg != null ? formatWeight(kg, unit) : null);
+
+  switch (hint.kind) {
+    case 'BASELINE':
+      return hint.suggestedReps
+        ? `First time logging this - aim for ${hint.suggestedReps} reps and set your baseline.`
+        : 'First time logging this - whatever you do becomes your baseline.';
+    case 'ADD_WEIGHT': {
+      const to = weight(hint.suggestedWeightKg);
+      const from = weight(hint.fromWeightKg);
+      if (!to) return null;
+      return `You cleared ${hint.targetRepsMax} reps at ${from} last time - try ${to} today.`;
+    }
+    case 'ADD_REPS': {
+      const at = weight(hint.suggestedWeightKg);
+      const reps = hint.suggestedReps;
+      if (!reps) return null;
+      return at
+        ? `Stay at ${at} and chase ${reps} reps on every set.`
+        : `Beat last time: aim for ${reps} reps per set.`;
+    }
+    case 'REPEAT': {
+      const at = weight(hint.suggestedWeightKg);
+      return at
+        ? `Repeat ${at} until all sets hit ${hint.targetRepsMin} reps - you managed ${hint.fromReps}.`
+        : `Build back to ${hint.targetRepsMin} reps before adding anything.`;
+    }
+    default:
+      return null;
+  }
+}
+
+/* ------------------------------------------------------------------ */
 /* One exercise in the workout                                          */
 /* ------------------------------------------------------------------ */
 
@@ -234,12 +285,17 @@ export function SessionExerciseCard({
   exercise,
   unit,
   previous,
+  progression,
+  supersetLabel,
   isCurrent,
 }: {
   sessionId: string;
   exercise: SessionExercise;
   unit: Unit;
   previous: WorkoutSession['previousPerformance'][string] | undefined;
+  progression?: ProgressionHint;
+  /** e.g. "A1" when this exercise is part of a superset. */
+  supersetLabel?: string | null;
   isCurrent: boolean;
 }) {
   const queryClient = useQueryClient();
@@ -247,6 +303,18 @@ export function SessionExerciseCard({
   const [menuOpen, setMenuOpen] = useState(false);
   const [noteOpen, setNoteOpen] = useState(false);
   const [noteDraft, setNoteDraft] = useState(exercise.notes ?? '');
+  const [swapOpen, setSwapOpen] = useState(false);
+  const [platesOpen, setPlatesOpen] = useState(false);
+
+  const swap = useMutation({
+    mutationFn: (picked: Exercise) =>
+      api.post(`/sessions/exercises/${exercise.id}/swap`, { exerciseId: picked.id, keepSets: true }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: qk.session(sessionId) });
+      toast.success('Exercise swapped - the plan is untouched.');
+    },
+    onError: (err) => toast.error(errorMessage(err)),
+  });
 
   const addSet = useMutation({
     mutationFn: () => api.post(`/sessions/exercises/${exercise.id}/sets`, {}),
@@ -284,6 +352,16 @@ export function SessionExerciseCard({
   const total = exercise.sets.length;
   const complete = exercise.progress.isComplete || exercise.isSkipped;
 
+  // Advice is for work still to come - once it's logged, it's just noise.
+  const hintText = progression && !complete && done === 0 ? progressionText(progression, unit) : null;
+  // The calculator opens on the weight the user is actually working with.
+  const weighedSets = exercise.sets.filter((s) => s.weightKg != null);
+  const workingWeight =
+    weighedSets.find((s) => !s.isCompleted)?.weightKg ??
+    weighedSets[weighedSets.length - 1]?.weightKg ??
+    exercise.targetWeightKg ??
+    null;
+
   return (
     <section
       id={`exercise-${exercise.id}`}
@@ -299,6 +377,9 @@ export function SessionExerciseCard({
         <ExerciseMedia media={exercise.exercise.media} name={exercise.nameSnapshot} mode="card" className="size-11 shrink-0" />
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
+            {supersetLabel ? (
+              <Badge size="sm" tone="accent" title="Performed back-to-back as a superset">{supersetLabel}</Badge>
+            ) : null}
             <h3 className={cn('truncate text-sm font-semibold text-text sm:text-base', exercise.isSkipped && 'line-through')}>
               {exercise.nameSnapshot}
             </h3>
@@ -333,6 +414,22 @@ export function SessionExerciseCard({
                   onClick={() => { setMenuOpen(false); setNoteDraft(exercise.notes ?? ''); setNoteOpen(true); }}
                 >
                   Exercise note
+                </button>
+                {tracksWeight(exercise.trackingType) ? (
+                  <button
+                    type="button"
+                    className="flex w-full items-center gap-2.5 px-3 py-2 text-sm text-text-muted hover:bg-surface-hover hover:text-text"
+                    onClick={() => { setMenuOpen(false); setPlatesOpen(true); }}
+                  >
+                    <Weight className="size-4" aria-hidden /> Plate calculator
+                  </button>
+                ) : null}
+                <button
+                  type="button"
+                  className="flex w-full items-center gap-2.5 px-3 py-2 text-sm text-text-muted hover:bg-surface-hover hover:text-text"
+                  onClick={() => { setMenuOpen(false); setSwapOpen(true); }}
+                >
+                  <Repeat className="size-4" aria-hidden /> Swap exercise
                 </button>
                 <button
                   type="button"
@@ -387,6 +484,14 @@ export function SessionExerciseCard({
         </div>
       ) : null}
 
+      {/* Double progression - a suggestion, sitting above the empty sets */}
+      {hintText ? (
+        <p className="flex items-start gap-1.5 border-b border-border bg-accent-soft/30 px-3 py-2 text-xs text-text sm:px-4">
+          <ArrowUpRight className="mt-0.5 size-3.5 shrink-0 text-accent" aria-hidden />
+          <span>{hintText}</span>
+        </p>
+      ) : null}
+
       {/* Sets */}
       <ul className="space-y-1 p-2 sm:p-2.5">
         {exercise.sets.map((set) => (
@@ -438,6 +543,29 @@ export function SessionExerciseCard({
             </Button>
           </div>
         </div>
+      ) : null}
+
+      {/* Substitute the exercise in this slot - the plan slot itself stays. */}
+      <ExercisePicker
+        mode="single"
+        open={swapOpen}
+        onClose={() => setSwapOpen(false)}
+        title={`Swap ${exercise.nameSnapshot}`}
+        excludeIds={[exercise.exercise.id]}
+        onPick={(picked) => {
+          setSwapOpen(false);
+          swap.mutate(picked);
+        }}
+      />
+
+      {platesOpen ? (
+        <PlateCalculator
+          open={platesOpen}
+          onClose={() => setPlatesOpen(false)}
+          unit={unit}
+          initialWeight={workingWeight != null ? fromKg(workingWeight, unit) : null}
+          exerciseName={exercise.nameSnapshot}
+        />
       ) : null}
     </section>
   );

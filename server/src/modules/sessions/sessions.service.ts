@@ -4,6 +4,7 @@ import { badRequest, conflict, notFound } from '../../lib/errors.js';
 import { parseIsoDate, todayFor } from '../../lib/dates.js';
 import { num } from '../../lib/serialize.js';
 import { countsTowardVolume, deriveSetMetrics } from '../../lib/strength.js';
+import { suggestProgression, type ProgressionHint } from '../../lib/progression.js';
 import {
   PlanDayType,
   PublishStatus,
@@ -27,6 +28,7 @@ import type {
   listSessionsQuery,
   logSetSchema,
   startSessionSchema,
+  swapSessionExerciseSchema,
   updateSessionExerciseSchema,
   updateSessionSchema,
 } from './sessions.schemas.js';
@@ -157,6 +159,7 @@ export async function startSession(userId: string, input: z.infer<typeof startSe
               restSeconds: true,
               trackingType: true,
               notes: true,
+              supersetKey: true,
               exercise: { select: { id: true, name: true, trackingType: true, defaultRestSeconds: true } },
               plannedSets: {
                 orderBy: { setNumber: 'asc' },
@@ -220,6 +223,7 @@ export async function startSession(userId: string, input: z.infer<typeof startSe
             targetWeightKg: pe.targetWeightKg,
             restSeconds: pe.restSeconds ?? pe.exercise.defaultRestSeconds,
             notes: pe.notes,
+            supersetKey: pe.supersetKey,
             sets: {
               create: Array.from({ length: plannedSetCount }, (_, index) => {
                 const planned = pe.plannedSets[index];
@@ -262,9 +266,23 @@ export async function getSession(userId: string, sessionId: string) {
     sessionId,
   );
 
+  // Coaching, keyed by session exercise: what to aim for this time, based on
+  // the same numbers the user can already see under "last time".
+  const progression: Record<string, ProgressionHint> = {};
+  for (const exercise of session.exercises) {
+    const hint = suggestProgression({
+      trackingType: exercise.trackingType,
+      targetRepsMin: exercise.targetRepsMin,
+      targetRepsMax: exercise.targetRepsMax,
+      previousSets: previous[exercise.exercise.id]?.sets ?? null,
+    });
+    if (hint) progression[exercise.id] = hint;
+  }
+
   return {
     ...serializeSession(session as never),
     previousPerformance: previous,
+    progression,
   };
 }
 
@@ -506,6 +524,70 @@ export async function addSessionExercise(
   });
 
   return serializeSessionExercise(created as never);
+}
+
+/**
+ * Replaces the exercise in a slot mid-workout (busy machine, tweaked joint).
+ *
+ * Logged work is never silently rewritten: swapping is refused once a set has
+ * been completed, because those numbers belong to the old exercise. The plan
+ * link is kept so this still counts as "the plan's third slot, substituted" -
+ * and so plan sync does not re-add the original underneath it.
+ */
+export async function swapSessionExercise(
+  userId: string,
+  id: string,
+  input: z.infer<typeof swapSessionExerciseSchema>,
+) {
+  const row = await assertSessionExercise(userId, id);
+
+  const completed = await prisma.sessionSet.count({ where: { sessionExerciseId: id, isCompleted: true } });
+  if (completed > 0) {
+    throw conflict(
+      'You have already logged sets on this exercise. Remove it instead if you want to change it.',
+      'EXERCISE_ALREADY_LOGGED',
+    );
+  }
+
+  const exercise = await prisma.exercise.findFirst({
+    where: {
+      id: input.exerciseId,
+      OR: [
+        { isCustom: false, status: PublishStatus.PUBLISHED },
+        { isCustom: true, createdById: userId },
+      ],
+    },
+    select: { id: true, name: true, trackingType: true, defaultRestSeconds: true },
+  });
+  if (!exercise) throw notFound('exercise');
+  if (exercise.id === row.exerciseId) return getSession(userId, row.sessionId);
+
+  const existingSets = await prisma.sessionSet.count({ where: { sessionExerciseId: id } });
+  const setCount = input.keepSets ? Math.max(1, existingSets) : 1;
+
+  await prisma.$transaction([
+    // The old blanks were shaped for the old exercise - targets and units may
+    // not even apply, so the slot restarts clean.
+    prisma.sessionSet.deleteMany({ where: { sessionExerciseId: id } }),
+    prisma.sessionExercise.update({
+      where: { id },
+      data: {
+        exerciseId: exercise.id,
+        nameSnapshot: exercise.name,
+        trackingType: exercise.trackingType,
+        targetWeightKg: null,
+        restSeconds: exercise.defaultRestSeconds,
+        sets: {
+          create: Array.from({ length: setCount }, (_, index) => ({
+            setNumber: index + 1,
+            setType: SetType.NORMAL,
+          })),
+        },
+      },
+    }),
+  ]);
+
+  return getSession(userId, row.sessionId);
 }
 
 export async function updateSessionExercise(

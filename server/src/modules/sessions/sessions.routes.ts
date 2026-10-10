@@ -11,6 +11,7 @@ import {
   logSetSchema,
   reorderSessionExercisesSchema,
   startSessionSchema,
+  swapSessionExerciseSchema,
   updateSessionExerciseSchema,
   updateSessionSchema,
 } from './sessions.schemas.js';
@@ -70,6 +71,20 @@ router.delete(
   async (req, res) => {
     await service.removeSessionExercise(uid(req).id, req.params.sessionExerciseId as string);
     res.status(204).end();
+  },
+);
+
+/** Substitute the exercise in a slot - busy machine, sore joint, no judgement. */
+router.post(
+  '/exercises/:sessionExerciseId/swap',
+  validate({ params: cuidParam('sessionExerciseId'), body: swapSessionExerciseSchema }),
+  async (req, res) => {
+    const session = await service.swapSessionExercise(
+      uid(req).id,
+      req.params.sessionExerciseId as string,
+      req.body,
+    );
+    res.json({ session });
   },
 );
 

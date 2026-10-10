@@ -530,6 +530,7 @@ async function syncActiveSession(planDayId: string) {
       restSeconds: true,
       trackingType: true,
       notes: true,
+      supersetKey: true,
       exercise: { select: { name: true, trackingType: true, defaultRestSeconds: true } },
       plannedSets: {
         orderBy: { setNumber: 'asc' },
@@ -586,6 +587,7 @@ async function syncActiveSession(planDayId: string) {
           targetWeightKg: pe.targetWeightKg,
           restSeconds: pe.restSeconds ?? pe.exercise.defaultRestSeconds,
           notes: pe.notes,
+          supersetKey: pe.supersetKey,
           sets: {
             create: Array.from({ length: plannedSetCount }, (_, index) => {
               const planned = pe.plannedSets[index];

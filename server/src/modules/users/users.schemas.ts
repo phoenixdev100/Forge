@@ -3,6 +3,7 @@ import { isoDate } from '../../middleware/validate.js';
 import {
   ExperienceLevel,
   FitnessGoal,
+  Sex,
   UnitSystem,
 } from '../../generated/prisma/enums.js';
 
@@ -17,6 +18,7 @@ export const updateProfileSchema = z
     heightCm: z.coerce.number().min(50).max(260).nullish(),
     bodyWeightKg: z.coerce.number().min(20).max(400).nullish(),
     dateOfBirth: isoDate.nullish(),
+    sex: z.enum(Sex).nullish(),
     timezone: z.string().min(1).max(64).optional(),
     weekStartsOn: z.coerce.number().int().min(0).max(6).optional(),
   })
@@ -30,8 +32,15 @@ export const onboardingSchema = z.object({
   unit: z.enum(UnitSystem).optional(),
   bodyWeightKg: z.coerce.number().min(20).max(400).nullish(),
   heightCm: z.coerce.number().min(50).max(260).nullish(),
+  dateOfBirth: isoDate.nullish(),
+  sex: z.enum(Sex).nullish(),
   weekStartsOn: z.coerce.number().int().min(0).max(6).optional(),
   timezone: z.string().min(1).max(64).optional(),
+});
+
+export const exportQuerySchema = z.object({
+  /** `json` is the full archive; `csv` is one row per logged set. */
+  format: z.enum(['json', 'csv']).default('json'),
 });
 
 export const notificationPrefsSchema = z.object({

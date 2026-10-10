@@ -27,6 +27,7 @@ const ExerciseProgressPage = lazy(() => import('@/pages/progress/ExerciseProgres
 const RecordsPage = lazy(() => import('@/pages/RecordsPage'));
 const GoalsPage = lazy(() => import('@/pages/goals/GoalsPage'));
 const AchievementsPage = lazy(() => import('@/pages/AchievementsPage'));
+const ProfilePage = lazy(() => import('@/pages/ProfilePage'));
 const SettingsPage = lazy(() => import('@/pages/SettingsPage'));
 const AdminPage = lazy(() => import('@/pages/AdminPage'));
 const NotFoundPage = lazy(() => import('@/pages/NotFoundPage'));
@@ -129,6 +130,7 @@ export function App() {
         <Route path="records" element={<RecordsPage />} />
         <Route path="goals" element={<GoalsPage />} />
         <Route path="achievements" element={<AchievementsPage />} />
+        <Route path="profile" element={<ProfilePage />} />
         <Route path="settings" element={<SettingsPage />} />
         <Route path="admin" element={<AdminPage />} />
       </Route>

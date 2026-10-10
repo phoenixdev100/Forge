@@ -20,6 +20,8 @@ import {
   Target,
   TrendingUp,
   Trophy,
+  UserRound,
+  WifiOff,
 } from 'lucide-react';
 import { api } from '@/lib/api';
 import { qk } from '@/lib/queryClient';
@@ -54,6 +56,36 @@ const MOBILE_NAV: NavItem[] = [
   { to: '/app/exercises', label: 'Exercises', icon: Dumbbell },
   { to: '/app/progress', label: 'Progress', icon: TrendingUp },
 ];
+
+/**
+ * Gym basements eat signal. Saying so plainly beats letting the user think a
+ * logged set saved when it did not - reads come from cache, writes will fail.
+ */
+function OfflineBanner() {
+  const [offline, setOffline] = useState(() => typeof navigator !== 'undefined' && !navigator.onLine);
+
+  useEffect(() => {
+    const online = () => setOffline(false);
+    const lost = () => setOffline(true);
+    window.addEventListener('online', online);
+    window.addEventListener('offline', lost);
+    return () => {
+      window.removeEventListener('online', online);
+      window.removeEventListener('offline', lost);
+    };
+  }, []);
+
+  if (!offline) return null;
+  return (
+    <p
+      role="status"
+      className="flex items-center justify-center gap-2 border-b border-warning/30 bg-warning-soft px-4 py-2 text-xs font-medium text-warning"
+    >
+      <WifiOff className="size-3.5 shrink-0" aria-hidden />
+      You're offline - showing the last data loaded. Changes won't save until you reconnect.
+    </p>
+  );
+}
 
 function NavRow({ item, onNavigate, collapsed }: { item: NavItem; onNavigate?: () => void; collapsed?: boolean }) {
   const Icon = item.icon;
@@ -179,6 +211,14 @@ function UserMenu({ collapsed }: { collapsed?: boolean }) {
             role="menu"
             className="absolute bottom-full left-0 z-20 mb-2 w-full min-w-48 overflow-hidden rounded-[var(--radius-card)] border border-border bg-surface-raised shadow-[var(--shadow-raised)]"
           >
+            <Link
+              to="/app/profile"
+              role="menuitem"
+              className="flex items-center gap-2.5 px-3 py-2.5 text-sm text-text-muted transition-colors hover:bg-surface-hover hover:text-text"
+            >
+              <UserRound className="size-4" aria-hidden />
+              Your profile
+            </Link>
             <Link
               to="/app/settings"
               role="menuitem"
@@ -364,6 +404,13 @@ export function AppShell({ children }: { children: ReactNode }) {
               <History className="size-4" aria-hidden />
             </Link>
             <Link
+              to="/app/profile"
+              aria-label="Your profile"
+              className="flex size-10 items-center justify-center rounded-[var(--radius-control)] text-text-muted transition-colors hover:bg-surface-hover hover:text-text"
+            >
+              <UserRound className="size-4" aria-hidden />
+            </Link>
+            <Link
               to="/app/settings"
               aria-label="Settings"
               className="flex size-10 items-center justify-center rounded-[var(--radius-control)] text-text-muted transition-colors hover:bg-surface-hover hover:text-text"
@@ -375,6 +422,7 @@ export function AppShell({ children }: { children: ReactNode }) {
       </header>
 
       <div className={cn('transition-[padding-left]', collapsed ? 'lg:pl-16' : 'lg:pl-64')}>
+        <OfflineBanner />
         <ActiveSessionBanner />
         <main className="mx-auto w-full max-w-7xl px-4 pt-5 pb-28 sm:px-6 lg:px-8 lg:pt-8 lg:pb-12">{children}</main>
       </div>
