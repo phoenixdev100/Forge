@@ -2,6 +2,7 @@ import { prisma } from '../../db/prisma.js';
 import {
   addDays,
   cyclePositionFor,
+  parseIsoDate,
   startOfWeek,
   toIsoDate,
   todayFor,
@@ -240,6 +241,56 @@ export async function getMuscleGroupBalance(userId: string, days = 30) {
   }
 
   return [...byMuscle.values()].sort((a, b) => b.sets - a.sets);
+}
+
+/**
+ * Recovery map: for every muscle group, when it was last trained and how much
+ * it worked in the last 7 days. Untrained muscles come back with a null date
+ * so the client can flag them as the biggest gap, not hide them.
+ */
+export async function getMuscleRecovery(userId: string) {
+  const user = await getUserContext(userId);
+  const today = todayFor(user.timezone);
+  const weekAgo = addDays(today, -6);
+
+  const [muscles, rows] = await Promise.all([
+    prisma.muscleGroup.findMany({
+      select: { id: true, slug: true, name: true, colorHex: true },
+      orderBy: { name: 'asc' },
+    }),
+    prisma.sessionExercise.findMany({
+      where: { session: { userId, status: SessionStatus.COMPLETED } },
+      select: {
+        exercise: { select: { primaryMuscleId: true } },
+        session: { select: { date: true } },
+        sets: { where: { isCompleted: true, NOT: { setType: 'WARMUP' } }, select: { id: true } },
+      },
+    }),
+  ]);
+
+  const byMuscle = new Map<string, { lastTrainedOn: string | null; setsLast7d: number }>();
+  for (const row of rows) {
+    const id = row.exercise.primaryMuscleId;
+    if (!id) continue;
+    const entry = byMuscle.get(id) ?? { lastTrainedOn: null, setsLast7d: 0 };
+    const date = toIsoDate(row.session.date);
+    if (entry.lastTrainedOn == null || date > entry.lastTrainedOn) entry.lastTrainedOn = date;
+    if (row.session.date >= weekAgo && row.session.date <= today) entry.setsLast7d += row.sets.length;
+    byMuscle.set(id, entry);
+  }
+
+  return muscles.map((m) => {
+    const stats = byMuscle.get(m.id);
+    return {
+      ...m,
+      lastTrainedOn: stats?.lastTrainedOn ?? null,
+      daysSince:
+        stats?.lastTrainedOn != null
+          ? Math.round((today.getTime() - parseIsoDate(stats.lastTrainedOn).getTime()) / 86_400_000)
+          : null,
+      setsLast7d: stats?.setsLast7d ?? 0,
+    };
+  });
 }
 
 /**
