@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   ArrowUpRight,
+  Calculator,
   Check,
   ChevronDown,
   ChevronUp,
@@ -37,6 +38,7 @@ import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { Stepper } from '@/components/ui/Stepper';
 import { PlateCalculator } from './PlateCalculator';
+import { OneRmCalculator } from './OneRmCalculator';
 import { useRestTimer } from './RestTimer';
 
 type SetUpdate = Partial<Pick<SessionSet, 'reps' | 'timeSeconds' | 'distanceM' | 'rpe' | 'notes' | 'isCompleted' | 'setType'> & { weightKg: number | null }>;
@@ -305,6 +307,7 @@ export function SessionExerciseCard({
   const [noteDraft, setNoteDraft] = useState(exercise.notes ?? '');
   const [swapOpen, setSwapOpen] = useState(false);
   const [platesOpen, setPlatesOpen] = useState(false);
+  const [oneRmOpen, setOneRmOpen] = useState(false);
 
   const swap = useMutation({
     mutationFn: (picked: Exercise) =>
@@ -422,6 +425,15 @@ export function SessionExerciseCard({
                     onClick={() => { setMenuOpen(false); setPlatesOpen(true); }}
                   >
                     <Weight className="size-4" aria-hidden /> Plate calculator
+                  </button>
+                ) : null}
+                {tracksWeight(exercise.trackingType) ? (
+                  <button
+                    type="button"
+                    className="flex w-full items-center gap-2.5 px-3 py-2 text-sm text-text-muted hover:bg-surface-hover hover:text-text"
+                    onClick={() => { setMenuOpen(false); setOneRmOpen(true); }}
+                  >
+                    <Calculator className="size-4" aria-hidden /> 1RM calculator
                   </button>
                 ) : null}
                 <button
@@ -565,6 +577,21 @@ export function SessionExerciseCard({
           unit={unit}
           initialWeight={workingWeight != null ? fromKg(workingWeight, unit) : null}
           exerciseName={exercise.nameSnapshot}
+        />
+      ) : null}
+
+      {oneRmOpen ? (
+        <OneRmCalculator
+          open={oneRmOpen}
+          onClose={() => setOneRmOpen(false)}
+          unit={unit}
+          initialWeight={workingWeight != null ? fromKg(workingWeight, unit) : null}
+          initialReps={
+            exercise.sets.find((s) => !s.isCompleted && s.reps != null)?.reps ??
+            exercise.sets.filter((s) => s.reps != null).at(-1)?.reps ??
+            exercise.targetRepsMax ??
+            null
+          }
         />
       ) : null}
     </section>

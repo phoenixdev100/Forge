@@ -249,6 +249,116 @@ export async function startSession(userId: string, input: z.infer<typeof startSe
   return getSession(userId, session.id);
 }
 
+/**
+ * "Do that workout again": clones a finished session's structure into a new
+ * in-progress workout for today. The last performance is pre-filled as the
+ * starting point of each set - not as logged work - so the user just ticks
+ * sets off. PRs and history of the original are untouched.
+ */
+export async function repeatSession(userId: string, sessionId: string) {
+  const user = await prisma.user.findUniqueOrThrow({
+    where: { id: userId },
+    select: { timezone: true, unit: true },
+  });
+  const date = parseIsoDate(todayFor(user.timezone).toISOString().slice(0, 10));
+
+  // Same rule as startSession: a live workout for today always wins.
+  const existing = await prisma.workoutSession.findFirst({
+    where: { userId, date, status: SessionStatus.IN_PROGRESS },
+    select: { id: true },
+  });
+  if (existing) return getSession(userId, existing.id);
+
+  const source = await prisma.workoutSession.findFirst({
+    where: { id: sessionId, userId },
+    select: {
+      title: true,
+      planId: true,
+      planDayId: true,
+      muscleGroups: {
+        select: { muscleGroupId: true, sortOrder: true, nameSnapshot: true },
+      },
+      exercises: {
+        orderBy: { sortOrder: 'asc' },
+        select: {
+          exerciseId: true,
+          planExerciseId: true,
+          muscleGroupId: true,
+          sortOrder: true,
+          nameSnapshot: true,
+          trackingType: true,
+          targetSets: true,
+          targetRepsMin: true,
+          targetRepsMax: true,
+          targetWeightKg: true,
+          restSeconds: true,
+          notes: true,
+          supersetKey: true,
+          sets: {
+            orderBy: { setNumber: 'asc' },
+            select: {
+              setNumber: true,
+              setType: true,
+              weightKg: true,
+              reps: true,
+              timeSeconds: true,
+              distanceM: true,
+            },
+          },
+        },
+      },
+    },
+  });
+  if (!source) throw notFound('workout');
+  if (!source.exercises.length) {
+    throw badRequest('That workout has no exercises to repeat.');
+  }
+
+  const session = await prisma.workoutSession.create({
+    data: {
+      userId,
+      date,
+      title: source.title,
+      unit: user.unit,
+      status: SessionStatus.IN_PROGRESS,
+      planId: source.planId,
+      planDayId: source.planDayId,
+      muscleGroups: { create: source.muscleGroups },
+      exercises: {
+        create: source.exercises.map((e) => ({
+          exerciseId: e.exerciseId,
+          planExerciseId: e.planExerciseId,
+          muscleGroupId: e.muscleGroupId,
+          sortOrder: e.sortOrder,
+          nameSnapshot: e.nameSnapshot,
+          trackingType: e.trackingType,
+          targetSets: e.targetSets ?? e.sets.length,
+          targetRepsMin: e.targetRepsMin,
+          targetRepsMax: e.targetRepsMax,
+          targetWeightKg: e.targetWeightKg,
+          restSeconds: e.restSeconds,
+          notes: e.notes,
+          supersetKey: e.supersetKey,
+          sets: {
+            create: e.sets.map((s) => ({
+              setNumber: s.setNumber,
+              setType: s.setType,
+              weightKg: s.weightKg,
+              reps: s.reps,
+              timeSeconds: s.timeSeconds,
+              distanceM: s.distanceM,
+              isCompleted: false,
+            })),
+          },
+        })),
+      },
+    },
+    select: { id: true },
+  });
+
+  return getSession(userId, session.id);
+}
+
 // ---------------------------------------------------------------------------
 // Reading
 // ---------------------------------------------------------------------------

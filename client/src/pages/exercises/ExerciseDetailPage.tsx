@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   AlertTriangle,
   ArrowLeft,
+  Calculator,
   Check,
   ListPlus,
   Pencil,
@@ -17,7 +18,7 @@ import {
 import { api, errorMessage } from '@/lib/api';
 import { humanizeEnum, formatTimeAgo } from '@/lib/format';
 import { qk } from '@/lib/queryClient';
-import { TRACKING_LABELS } from '@/lib/tracking';
+import { TRACKING_LABELS, tracksWeight } from '@/lib/tracking';
 import type { ExerciseDetail } from '@/lib/types';
 import { toast } from 'sonner';
 import { ExerciseMedia } from '@/components/ExerciseMedia';
@@ -29,6 +30,8 @@ import { Textarea } from '@/components/ui/Input';
 import { ErrorState, PageLoader } from '@/components/ui/States';
 import { CreateExerciseDialog } from './CreateExerciseDialog';
 import { AddToPlanDialog } from './AddToPlanDialog';
+import { OneRmCalculator } from '@/components/workout/OneRmCalculator';
+import { useUnit } from '@/providers/AuthProvider';
 
 function InstructionList({ items, ordered }: { items: string[]; ordered?: boolean }) {
   const List = ordered ? 'ol' : 'ul';
@@ -59,6 +62,8 @@ export default function ExerciseDetailPage() {
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [noteDraft, setNoteDraft] = useState<string | null>(null);
   const [noteOpen, setNoteOpen] = useState(false);
+  const [oneRmOpen, setOneRmOpen] = useState(false);
+  const unit = useUnit();
 
   const { data, isPending, error, refetch } = useQuery({
     queryKey: qk.exercise(idOrSlug!),
@@ -168,6 +173,17 @@ export default function ExerciseDetailPage() {
               </div>
             </div>
             <div className="flex shrink-0 items-center gap-2">
+              {tracksWeight(exercise.trackingType) ? (
+                <Button
+                  variant="secondary"
+                  size="icon"
+                  className="size-12"
+                  aria-label="Open 1RM calculator"
+                  onClick={() => setOneRmOpen(true)}
+                >
+                  <Calculator className="size-4" />
+                </Button>
+              ) : null}
               <Button size="lg" onClick={() => setAddOpen(true)} leftIcon={<ListPlus className="size-4" />}>
                 Add to plan
               </Button>
@@ -264,6 +280,10 @@ export default function ExerciseDetailPage() {
       </div>
 
       <AddToPlanDialog exercise={exercise} open={addOpen} onClose={() => setAddOpen(false)} />
+
+      {oneRmOpen ? (
+        <OneRmCalculator open={oneRmOpen} onClose={() => setOneRmOpen(false)} unit={unit} />
+      ) : null}
 
       <Dialog
         open={noteOpen}

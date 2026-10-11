@@ -446,6 +446,17 @@ export type ProgressOverview = {
   activity: ActivityDay[];
 };
 
+/** Recovery map row - null dates mean "never trained". */
+export type MuscleRecovery = {
+  id: string;
+  slug: string;
+  name: string;
+  colorHex: string;
+  lastTrainedOn: string | null;
+  daysSince: number | null;
+  setsLast7d: number;
+};
+
 export type ExerciseProgressPoint = {
   sessionId: string;
   date: string;

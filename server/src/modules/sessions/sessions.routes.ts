@@ -125,6 +125,11 @@ router.post('/:sessionId/reopen', validate({ params: cuidParam('sessionId') }), 
   res.json({ session: await service.reopenSession(uid(req).id, req.params.sessionId as string) });
 });
 
+/** Clones a finished workout into a fresh in-progress session for today. */
+router.post('/:sessionId/repeat', validate({ params: cuidParam('sessionId') }), async (req, res) => {
+  res.status(201).json({ session: await service.repeatSession(uid(req).id, req.params.sessionId as string) });
+});
+
 router.post('/:sessionId/abandon', validate({ params: cuidParam('sessionId') }), async (req, res) => {
   await service.abandonSession(uid(req).id, req.params.sessionId as string);
   res.status(204).end();

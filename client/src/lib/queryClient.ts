@@ -43,6 +43,7 @@ export const qk = {
   activeSession: ['sessions', 'active'] as const,
   progress: (params: Record<string, unknown>) => ['progress', params] as const,
   progressExercises: ['progress', 'exercises'] as const,
+  recovery: ['progress', 'recovery'] as const,
   exerciseProgress: (id: string) => ['progress', 'exercise', id] as const,
   records: (exerciseId?: string) => ['progress', 'records', exerciseId ?? 'all'] as const,
   goals: ['goals'] as const,

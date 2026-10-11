@@ -8,6 +8,7 @@ import {
   saveBarPreference,
 } from '@/lib/plates';
 import { plateStep, trimNumber, unitLabel, type Unit } from '@/lib/units';
+import { warmupRamp } from '@/lib/warmup';
 import { Button } from '@/components/ui/Button';
 import { Dialog } from '@/components/ui/Dialog';
 import { Stepper } from '@/components/ui/Stepper';
@@ -40,6 +41,7 @@ export function PlateCalculator({
   const [target, setTarget] = useState<number | null>(initialWeight);
 
   const load = useMemo(() => computePlates(target ?? 0, bar, unit), [target, bar, unit]);
+  const ramp = useMemo(() => warmupRamp(load.achieved, unit, bar), [load.achieved, unit, bar]);
   const heaviest = load.perSide[0]?.plate ?? 1;
   const hasPlates = load.perSide.length > 0;
 
@@ -152,6 +154,35 @@ export function PlateCalculator({
             {trimNumber(load.achieved)} {unitLabel(unit)} is the closest loadable weight below your target with
             standard plates.
           </p>
+        ) : null}
+
+        {/* The ramp up to the work weight - never lift the target cold. */}
+        {ramp.length ? (
+          <div className="rounded-[var(--radius-card)] border border-border bg-surface-inset p-3">
+            <p className="text-xs font-semibold tracking-wide text-text-subtle uppercase">Warm-up ramp</p>
+            <ol className="mt-2 space-y-1.5">
+              <li className="tnum flex items-baseline justify-between text-sm text-text-muted">
+                <span>Empty bar</span>
+                <span className="font-medium text-text">
+                  {trimNumber(bar)} {unitLabel(unit)} × 10
+                </span>
+              </li>
+              {ramp.map((step) => (
+                <li key={step.pct} className="tnum flex items-baseline justify-between text-sm text-text-muted">
+                  <span>{Math.round(step.pct * 100)}%</span>
+                  <span className="font-medium text-text">
+                    {trimNumber(step.weight)} {unitLabel(unit)} × {step.reps}
+                  </span>
+                </li>
+              ))}
+              <li className="tnum flex items-baseline justify-between border-t border-border pt-1.5 text-sm">
+                <span className="font-medium text-text">Working weight</span>
+                <span className="font-semibold text-accent">
+                  {trimNumber(load.achieved)} {unitLabel(unit)}
+                </span>
+              </li>
+            </ol>
+          </div>
         ) : null}
       </div>
     </Dialog>
