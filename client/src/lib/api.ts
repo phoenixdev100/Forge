@@ -29,7 +29,11 @@ export class ApiError extends Error {
   }
 }
 
-const BASE = '/api';
+// Split deploys set VITE_API_URL to the API origin (e.g. https://api.forge.app).
+// Empty = same-origin requests, which the Vite dev proxy and the docker nginx
+// proxy forward to the API transparently.
+const API_ORIGIN = ((import.meta.env.VITE_API_URL as string | undefined) ?? '').replace(/\/+$/, '');
+const BASE = `${API_ORIGIN}/api`;
 const SESSION_HINT_COOKIE = 'forge_sess';
 
 /**
@@ -61,7 +65,8 @@ function buildUrl(path: string, query?: RequestOptions['query']) {
       }
     }
   }
-  return url.pathname + url.search;
+  // Absolute when VITE_API_URL points at another origin; same-origin otherwise.
+  return url.toString();
 }
 
 /** Shared refresh promise so ten parallel 401s cause one refresh, not ten. */
@@ -154,11 +159,20 @@ export const api = {
 
 /** Multipart upload - media files, not JSON. */
 export async function apiForm<T>(path: string, form: FormData): Promise<T> {
-  const response = await fetch(`${BASE}${path}`, {
+  // Forms hit authed endpoints too, so an expired token gets the same silent
+  // refresh-and-retry as JSON requests.
+  let response = await fetch(`${BASE}${path}`, {
     method: 'POST',
     credentials: 'include',
     body: form,
   });
+  if (response.status === 401 && (await refreshSession())) {
+    response = await fetch(`${BASE}${path}`, {
+      method: 'POST',
+      credentials: 'include',
+      body: form,
+    });
+  }
   if (response.status === 204) return undefined as T;
   const payload = await response.json().catch(() => null);
   if (response.ok) return payload as T;
@@ -172,7 +186,10 @@ export async function apiForm<T>(path: string, form: FormData): Promise<T> {
  * the auth cookie refresh behaviour or surface server errors.
  */
 export async function apiDownload(path: string, query?: RequestOptions['query']): Promise<void> {
-  const response = await fetch(buildUrl(path, query), { credentials: 'include' });
+  let response = await fetch(buildUrl(path, query), { credentials: 'include' });
+  if (response.status === 401 && (await refreshSession())) {
+    response = await fetch(buildUrl(path, query), { credentials: 'include' });
+  }
   if (!response.ok) {
     const payload = await response.json().catch(() => null);
     const error = (payload as { error?: { code?: string; message?: string } } | null)?.error;

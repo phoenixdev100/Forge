@@ -30,7 +30,9 @@ export function createApp() {
       origin(origin, callback) {
         // Same-origin and server-to-server requests send no Origin header.
         if (!origin || env.CORS_ORIGINS.includes(origin)) return callback(null, true);
-        callback(new Error(`Origin ${origin} is not allowed`));
+        // Reject by withholding CORS headers - browsers then block the response.
+        // Throwing here would surface a fake 500 and pollute error logs.
+        callback(null, false);
       },
       credentials: true,
     }),

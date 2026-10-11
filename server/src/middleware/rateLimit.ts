@@ -33,3 +33,10 @@ export const passwordResetLimiter = rateLimit({
   windowMs: 60 * 60_000,
   limit: 5,
 });
+
+/** Moderate: refresh is rotation-protected, but it hits the DB every call. */
+export const refreshLimiter = rateLimit({
+  ...base,
+  windowMs: 60_000,
+  limit: 60,
+});
