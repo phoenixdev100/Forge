@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { promises as fsp } from 'node:fs';
 import path from 'node:path';
 import { Router } from 'express';
 import multer from 'multer';
@@ -41,16 +42,56 @@ const upload = multer({
     destination: env.UPLOAD_DIR,
     filename: (_req, file, cb) => cb(null, `${randomUUID()}${ALLOWED_MIME[file.mimetype]?.ext ?? '.bin'}`),
   }),
-  limits: { fileSize: 25 * 1024 * 1024, files: 2 },
+  limits: { fileSize: env.MAX_UPLOAD_MB * 1024 * 1024, files: 2 },
   fileFilter: (_req, file, cb) => {
     if (ALLOWED_MIME[file.mimetype]) cb(null, true);
     else cb(badRequest('Only JPG, PNG, WebP, GIF, MP4 and WebM files are accepted.'));
   },
 });
 
+/**
+ * The client-reported MIME type is not trustworthy, so every upload is checked
+ * against its magic bytes. A mismatch means a renamed `.exe`/script - delete it.
+ */
+const SIGNATURES: { mime: string; test: (head: Buffer) => boolean }[] = [
+  { mime: 'image/jpeg', test: (h) => h.length >= 3 && h[0] === 0xff && h[1] === 0xd8 && h[2] === 0xff },
+  {
+    mime: 'image/png',
+    test: (h) => h.length >= 8 && h.readBigUInt64BE(0) === 0x89504e470d0a1a0an,
+  },
+  { mime: 'image/gif', test: (h) => h.length >= 6 && h.toString('ascii', 0, 4) === 'GIF8' },
+  {
+    mime: 'image/webp',
+    test: (h) => h.length >= 12 && h.toString('ascii', 0, 4) === 'RIFF' && h.toString('ascii', 8, 12) === 'WEBP',
+  },
+  { mime: 'video/mp4', test: (h) => h.length >= 8 && h.toString('ascii', 4, 8) === 'ftyp' },
+  { mime: 'video/webm', test: (h) => h.length >= 4 && h.readUInt32BE(0) === 0x1a45dfa3 },
+];
+
+async function sniffMime(filePath: string): Promise<string | null> {
+  const handle = await fsp.open(filePath, 'r');
+  try {
+    const head = Buffer.alloc(12);
+    const { bytesRead } = await handle.read(head, 0, 12, 0);
+    const slice = head.subarray(0, bytesRead);
+    return SIGNATURES.find((sig) => sig.test(slice))?.mime ?? null;
+  } finally {
+    await handle.close();
+  }
+}
+
 router.post('/media', upload.array('files', 2), async (req, res) => {
   const files = (req.files ?? []) as Express.Multer.File[];
   if (!files.length) throw badRequest('Attach at least one file.');
+
+  // Verify content signatures before the files are ever trusted.
+  for (const file of files) {
+    const actual = await sniffMime(file.path).catch(() => null);
+    if (actual !== file.mimetype) {
+      await Promise.all(files.map((f) => fsp.unlink(f.path).catch(() => undefined)));
+      throw badRequest('The file contents do not match its declared type.');
+    }
+  }
 
   const created = await Promise.all(
     files.map((file) =>

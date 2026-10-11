@@ -88,6 +88,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     } finally {
       setUserState(null);
       queryClient.clear();
+      // The service worker keeps last-loaded data for offline use; drop it so
+      // the next person on this device never sees this account's data offline.
+      if ('caches' in window) {
+        void caches.keys().then((keys) =>
+          Promise.all(keys.filter((k) => k.startsWith('forge-data-')).map((k) => caches.delete(k))),
+        );
+      }
     }
   }, []);
 

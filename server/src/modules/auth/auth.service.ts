@@ -2,8 +2,9 @@ import crypto from 'node:crypto';
 import { prisma } from '../../db/prisma.js';
 import { env } from '../../config/env.js';
 import { logger } from '../../lib/logger.js';
-import { conflict, unauthorized } from '../../lib/errors.js';
+import { conflict, tooManyRequests, unauthorized } from '../../lib/errors.js';
 import { fakeVerify, hashPassword, verifyPassword } from '../../lib/password.js';
+import { mailConfigured, sendPasswordResetEmail } from '../../lib/mailer.js';
 import {
   createRefreshToken,
   createUrlSafeToken,
@@ -16,6 +17,35 @@ import type { LoginInput, RegisterInput } from './auth.schemas.js';
 import type { UserModel } from '../../generated/prisma/models.js';
 
 type Context = { userAgent?: string | undefined; ip?: string | undefined };
+
+/**
+ * Per-account login throttle - complements the per-IP authLimiter. A botnet
+ * rotating IPs can sidestep IP limits, but every failed attempt on one account
+ * still counts here no matter where it came from. In-memory, so the counter
+ * resets on restart and is per-instance; that is acceptable defence-in-depth
+ * on top of the IP limiter.
+ */
+const LOGIN_WINDOW_MS = 15 * 60_000;
+const LOGIN_MAX_FAILS = 10;
+const loginFails = new Map<string, { count: number; resetAt: number }>();
+
+function throttleCheck(email: string) {
+  const entry = loginFails.get(email);
+  if (entry && entry.resetAt > Date.now() && entry.count >= LOGIN_MAX_FAILS) {
+    throw tooManyRequests('Too many sign-in attempts on this account. Try again in a few minutes.');
+  }
+}
+
+function throttleFail(email: string) {
+  const now = Date.now();
+  const entry = loginFails.get(email);
+  if (!entry || entry.resetAt <= now) loginFails.set(email, { count: 1, resetAt: now + LOGIN_WINDOW_MS });
+  else entry.count += 1;
+  // Bound memory: sweep expired entries whenever the map grows abnormally.
+  if (loginFails.size > 10_000) {
+    for (const [key, value] of loginFails) if (value.resetAt <= now) loginFails.delete(key);
+  }
+}
 
 async function issueTokens(user: UserModel, ctx: Context, family: string = crypto.randomUUID()) {
   const { token, tokenHash } = createRefreshToken();
@@ -57,18 +87,22 @@ export async function register(input: RegisterInput, ctx: Context) {
 }
 
 export async function login(input: LoginInput, ctx: Context) {
+  throttleCheck(input.email);
   const user = await prisma.user.findUnique({ where: { email: input.email } });
 
   // Same error and comparable timing whether the email exists or not.
   if (!user || user.deletedAt) {
     await fakeVerify();
+    throttleFail(input.email);
     throw unauthorized('That email or password is incorrect.', 'INVALID_CREDENTIALS');
   }
 
   if (!(await verifyPassword(input.password, user.passwordHash))) {
+    throttleFail(input.email);
     throw unauthorized('That email or password is incorrect.', 'INVALID_CREDENTIALS');
   }
 
+  loginFails.delete(input.email);
   await prisma.user.update({ where: { id: user.id }, data: { lastLoginAt: new Date() } });
 
   const tokens = await issueTokens(user, ctx);
@@ -144,10 +178,17 @@ export async function requestPasswordReset(email: string) {
   });
 
   const link = `${env.APP_URL}/reset-password?token=${token}`;
-  // No mail provider is wired up yet; in development the link is logged so the
-  // flow is fully testable end to end.
-  if (env.isProduction) {
-    logger.info({ userId: user.id }, 'password reset requested');
+
+  if (mailConfigured()) {
+    try {
+      await sendPasswordResetEmail(email, link);
+      logger.info({ userId: user.id }, 'password reset email sent');
+    } catch (err) {
+      // A delivery failure must never reveal whether the account exists.
+      logger.error({ err, userId: user.id }, 'password reset email failed to send');
+    }
+  } else if (env.isProduction) {
+    logger.warn({ userId: user.id }, 'password reset requested but MAIL_PROVIDER is not configured');
   } else {
     logger.info({ link }, 'password reset link (development only)');
   }

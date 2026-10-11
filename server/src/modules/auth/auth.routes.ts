@@ -4,7 +4,7 @@ import { env } from '../../config/env.js';
 import { unauthorized } from '../../lib/errors.js';
 import { validate } from '../../middleware/validate.js';
 import { currentUser, requireAuth } from '../../middleware/auth.js';
-import { authLimiter, passwordResetLimiter } from '../../middleware/rateLimit.js';
+import { authLimiter, passwordResetLimiter, refreshLimiter } from '../../middleware/rateLimit.js';
 import { serializeUser } from '../users/users.serializer.js';
 import { REFRESH_COOKIE, clearAuthCookies, setAuthCookies } from './auth.cookies.js';
 import * as service from './auth.service.js';
@@ -34,7 +34,7 @@ router.post('/login', authLimiter, validate({ body: loginSchema }), async (req, 
 });
 
 /** Called by the client's 401 interceptor to transparently extend a session. */
-router.post('/refresh', async (req, res) => {
+router.post('/refresh', refreshLimiter, async (req, res) => {
   const token = readRefreshCookie(req);
   if (!token) throw unauthorized('Your session is no longer valid.', 'NO_REFRESH_TOKEN');
 

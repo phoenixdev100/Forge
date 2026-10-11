@@ -36,6 +36,23 @@ const schema = z.object({
 
   RESET_TOKEN_TTL_MINUTES: z.coerce.number().int().positive().default(30),
 
+  MAIL_PROVIDER: z.enum(['none', 'smtp']).default('none'),
+  MAIL_FROM: z.string().min(3).default('Forge <noreply@example.com>'),
+  SMTP_HOST: z
+    .string()
+    .optional()
+    .transform((v) => (v && v.trim() ? v.trim() : undefined)),
+  SMTP_PORT: z.coerce.number().int().positive().default(587),
+  SMTP_SECURE: booleanish,
+  SMTP_USER: z
+    .string()
+    .optional()
+    .transform((v) => (v && v.trim() ? v.trim() : undefined)),
+  SMTP_PASS: z
+    .string()
+    .optional()
+    .transform((v) => (v && v.trim() ? v.trim() : undefined)),
+
   UPLOAD_DIR: z.string().default('uploads'),
   MAX_UPLOAD_MB: z.coerce.number().int().positive().default(25),
 
@@ -53,6 +70,16 @@ if (!parsed.success) {
     .join('\n');
   // Fail fast and loudly: a half-configured server is worse than no server.
   console.error(`\nInvalid environment configuration:\n${details}\n\nCopy server/.env.example to server/.env and fill it in.\n`);
+  process.exit(1);
+}
+
+if (parsed.data.MAIL_PROVIDER === 'smtp' && !parsed.data.SMTP_HOST) {
+  console.error('\nInvalid environment configuration:\n  - SMTP_HOST is required when MAIL_PROVIDER=smtp\n');
+  process.exit(1);
+}
+
+if (parsed.data.SMTP_USER && !parsed.data.SMTP_PASS) {
+  console.error('\nInvalid environment configuration:\n  - SMTP_PASS is required when SMTP_USER is set\n');
   process.exit(1);
 }
 
