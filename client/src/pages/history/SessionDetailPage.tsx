@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { ArrowLeft, Dumbbell, Pencil, Repeat, Timer, Trash2, Trophy } from 'lucide-react';
+import { ArrowLeft, Dumbbell, GitCompareArrows, Pencil, Repeat, RotateCcw, Share2, Timer, Trash2, Trophy } from 'lucide-react';
 import { api, errorMessage } from '@/lib/api';
 import { formatDate, formatDuration } from '@/lib/format';
 import { setTypeBadge, tracksReps, tracksWeight } from '@/lib/tracking';
@@ -10,7 +10,9 @@ import { qk, invalidateWorkoutData } from '@/lib/queryClient';
 import type { WorkoutSession } from '@/lib/types';
 import { toast } from 'sonner';
 import { useUnit } from '@/providers/AuthProvider';
+import { shareWorkoutCard } from '@/lib/shareWorkout';
 import { ExerciseMedia } from '@/components/ExerciseMedia';
+import { SessionCompareDialog } from '@/components/history/SessionCompareDialog';
 import { Badge, MuscleBadge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { Card, CardBody, StatTile } from '@/components/ui/Card';
@@ -32,6 +34,8 @@ export default function SessionDetailPage() {
   const unit = useUnit();
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
+  const [compareOpen, setCompareOpen] = useState(false);
+  const [sharing, setSharing] = useState(false);
 
   const { data, isPending, error, refetch } = useQuery({
     queryKey: qk.session(sessionId!),
@@ -59,6 +63,30 @@ export default function SessionDetailPage() {
     onError: (err) => toast.error(errorMessage(err)),
   });
 
+  const repeat = useMutation({
+    mutationFn: () => api.post<{ session: WorkoutSession }>(`/sessions/${sessionId}/repeat`),
+    onSuccess: ({ session: fresh }) => {
+      invalidateWorkoutData();
+      navigate(`/app/workout/${fresh.id}`, { replace: true });
+    },
+    onError: (err) => toast.error(errorMessage(err)),
+  });
+
+  async function share() {
+    if (!data) return;
+    setSharing(true);
+    try {
+      const how = await shareWorkoutCard(data.session, unit);
+      toast.success(how === 'shared' ? 'Shared.' : 'Card image downloaded.');
+    } catch (err) {
+      // The user backing out of the share sheet is not an error.
+      if (err instanceof Error && err.name === 'AbortError') return;
+      toast.error(errorMessage(err));
+    } finally {
+      setSharing(false);
+    }
+  }
+
   if (isPending) return <PageLoader label="Loading workout" />;
   if (error || !data) return <ErrorState error={error} onRetry={() => void refetch()} />;
 
@@ -73,11 +101,39 @@ export default function SessionDetailPage() {
         {session.status === 'IN_PROGRESS' ? (
           <Button size="sm" onClick={() => navigate(`/app/workout/${session.id}`)}>Resume workout</Button>
         ) : (
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center justify-end gap-2">
             {session.status === 'COMPLETED' ? (
-              <Button variant="secondary" size="sm" leftIcon={<Pencil className="size-3.5" />} onClick={() => setEditOpen(true)}>
-                Edit workout
-              </Button>
+              <>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  leftIcon={<RotateCcw className="size-3.5" />}
+                  isLoading={repeat.isPending}
+                  onClick={() => repeat.mutate()}
+                >
+                  Repeat
+                </Button>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  leftIcon={<GitCompareArrows className="size-3.5" />}
+                  onClick={() => setCompareOpen(true)}
+                >
+                  Compare
+                </Button>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  leftIcon={<Share2 className="size-3.5" />}
+                  isLoading={sharing}
+                  onClick={() => void share()}
+                >
+                  Share
+                </Button>
+                <Button variant="secondary" size="sm" leftIcon={<Pencil className="size-3.5" />} onClick={() => setEditOpen(true)}>
+                  Edit
+                </Button>
+              </>
             ) : null}
             <Button variant="ghost" size="icon" aria-label="Delete workout" className="text-text-subtle hover:text-danger" onClick={() => setDeleteOpen(true)}>
               <Trash2 className="size-4" />
@@ -220,6 +276,7 @@ export default function SessionDetailPage() {
         description="This removes the session and its PRs from your history. This cannot be undone."
         confirmLabel="Delete workout"
       />
+      <SessionCompareDialog open={compareOpen} onClose={() => setCompareOpen(false)} session={session} />
     </div>
   );
 }

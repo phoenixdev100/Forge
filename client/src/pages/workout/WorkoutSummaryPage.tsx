@@ -2,11 +2,12 @@ import { useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { motion } from 'framer-motion';
-import { CheckCircle2, Dumbbell, Flame, Home, Repeat, Timer, Trophy } from 'lucide-react';
+import { CheckCircle2, Dumbbell, Flame, Home, Repeat, Share2, Timer, Trophy } from 'lucide-react';
 import { api, errorMessage } from '@/lib/api';
 import { formatDate, formatDuration } from '@/lib/format';
 import { formatSet } from '@/lib/tracking';
 import { formatVolume } from '@/lib/units';
+import { shareWorkoutCard } from '@/lib/shareWorkout';
 import { qk } from '@/lib/queryClient';
 import type { WorkoutSession } from '@/lib/types';
 import { toast } from 'sonner';
@@ -38,6 +39,7 @@ export default function WorkoutSummaryPage() {
   const [notes, setNotes] = useState<string | null>(null);
   const [feeling, setFeeling] = useState<number | null>(null);
   const [saved, setSaved] = useState(false);
+  const [sharing, setSharing] = useState(false);
 
   const { data, isPending, error, refetch } = useQuery({
     queryKey: qk.session(sessionId!),
@@ -263,6 +265,24 @@ export default function WorkoutSummaryPage() {
           <ButtonLink variant="secondary" size="md" fullWidth to="/app/history" state={undefined}>
             View history
           </ButtonLink>
+          <Button
+            variant="secondary"
+            size="md"
+            fullWidth
+            leftIcon={<Share2 className="size-4" />}
+            isLoading={sharing}
+            onClick={() => {
+              setSharing(true);
+              shareWorkoutCard(session, unit)
+                .then((how) => toast.success(how === 'shared' ? 'Shared.' : 'Card image downloaded.'))
+                .catch((err: unknown) => {
+                  if (!(err instanceof Error && err.name === 'AbortError')) toast.error('Could not create the card.');
+                })
+                .finally(() => setSharing(false));
+            }}
+          >
+            Share card
+          </Button>
         </div>
       </main>
     </div>

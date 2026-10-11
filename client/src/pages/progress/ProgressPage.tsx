@@ -13,13 +13,13 @@ import {
   XAxis,
   YAxis,
 } from 'recharts';
-import { BarChart3, ChevronRight, Dumbbell, Flame, Repeat, TrendingUp } from 'lucide-react';
+import { BarChart3, ChevronRight, Dumbbell, Flame, HeartPulse, Repeat, TrendingUp } from 'lucide-react';
 import { api } from '@/lib/api';
 import { cn } from '@/lib/cn';
 import { formatDate } from '@/lib/format';
 import { formatVolume, formatWeight } from '@/lib/units';
 import { qk } from '@/lib/queryClient';
-import type { ExerciseProgress, ProgressOverview } from '@/lib/types';
+import type { ExerciseProgress, MuscleRecovery, ProgressOverview } from '@/lib/types';
 import { useUnit } from '@/providers/AuthProvider';
 import { PageHeader } from '@/components/layout/AppShell';
 import { Card, CardBody, CardHeader, StatTile } from '@/components/ui/Card';
@@ -99,6 +99,41 @@ function MuscleBalanceChart({ data }: { data: ProgressOverview['muscleGroupBalan
           </li>
         ))}
       </ul>
+    </div>
+  );
+}
+
+/**
+ * How recovered each muscle is - "what can I hit today?" answered at a glance.
+ * Longest-rested first, so the top of the list is always the suggestion.
+ */
+function MuscleRecoveryCard({ muscles }: { muscles: MuscleRecovery[] }) {
+  const sorted = [...muscles].sort((a, b) => (b.daysSince ?? 9999) - (a.daysSince ?? 9999));
+
+  const freshness = (m: MuscleRecovery): { label: string; tone: string } => {
+    if (m.daysSince == null) return { label: 'Never trained', tone: 'text-text-subtle' };
+    if (m.daysSince === 0) return { label: 'Today', tone: 'text-warning' };
+    if (m.daysSince === 1) return { label: 'Yesterday', tone: 'text-warning' };
+    if (m.daysSince <= 3) return { label: `${m.daysSince}d ago`, tone: 'text-text-muted' };
+    return { label: `${m.daysSince}d ago - fresh`, tone: 'text-success' };
+  };
+
+  return (
+    <div className="flex flex-wrap gap-2">
+      {sorted.map((m) => {
+        const f = freshness(m);
+        return (
+          <span
+            key={m.id}
+            className="inline-flex items-center gap-2 rounded-full border border-border bg-surface-inset px-3 py-1.5"
+            title={m.setsLast7d ? `${m.setsLast7d} working sets in the last 7 days` : 'No working sets this week'}
+          >
+            <span className="size-2 shrink-0 rounded-full" style={{ backgroundColor: m.colorHex }} aria-hidden />
+            <span className="text-xs font-medium text-text">{m.name}</span>
+            <span className={cn('tnum text-[11px]', f.tone)}>{f.label}</span>
+          </span>
+        );
+      })}
     </div>
   );
 }
@@ -187,6 +222,11 @@ export default function ProgressPage() {
     queryFn: () => api.get<{ exercises: Array<{ id: string; slug: string; name: string; sessions: number }> }>('/progress/exercises'),
   });
 
+  const { data: recovery } = useQuery({
+    queryKey: qk.recovery,
+    queryFn: () => api.get<{ muscles: MuscleRecovery[] }>('/progress/recovery'),
+  });
+
   const trainedList = trained?.exercises ?? [];
   const selectedExercise = exerciseId ?? trainedList[0]?.id ?? null;
 
@@ -240,6 +280,19 @@ export default function ProgressPage() {
             <StatTile label="Volume" value={formatVolume(totals.totalVolumeKg, unit)} icon={<TrendingUp className="size-4" />} />
             <StatTile label="Streak" value={`${streak.current}d`} sub={`best ${streak.longest}d`} icon={<Flame className="size-4" />} tone="accent" />
           </div>
+
+          {recovery?.muscles.length ? (
+            <Card>
+              <CardHeader
+                title="Muscle recovery"
+                description="Longest-rested first - the top of the list is what to train next"
+                icon={<HeartPulse className="size-4" />}
+              />
+              <CardBody className="pt-4">
+                <MuscleRecoveryCard muscles={recovery.muscles} />
+              </CardBody>
+            </Card>
+          ) : null}
 
           <Card>
             <CardHeader title="Weekly volume" description="Total weight moved per week" icon={<TrendingUp className="size-4" />} />

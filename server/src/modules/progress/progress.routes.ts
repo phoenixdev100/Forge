@@ -8,6 +8,7 @@ import {
   computeStreak,
   getExerciseProgress,
   getMuscleGroupBalance,
+  getMuscleRecovery,
   getTotals,
   getTrainedExercises,
   getVolumeTrend,
@@ -35,6 +36,11 @@ router.get('/', validate({ query: overviewQuery }), async (req, res) => {
   ]);
 
   res.json({ totals, streak, volumeTrend, muscleGroupBalance: balance, activity });
+});
+
+/** "What is fresh enough to train?" - recovery per muscle group. */
+router.get('/recovery', async (req, res) => {
+  res.json({ muscles: await getMuscleRecovery(currentUser(req).id) });
 });
 
 router.get('/exercises', async (req, res) => {
