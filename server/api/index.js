@@ -9,6 +9,8 @@
  * Vercel runtime logs.
  */
 
+console.log('[api/index.js] module loaded');
+
 let appPromise;
 
 function getApp() {
