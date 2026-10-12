@@ -77,3 +77,7 @@ export function createApp() {
 
   return app;
 }
+
+// Vercel's backend-framework mode expects the default export to be the
+// app handler. index.ts can still use the named `createApp` factory.
+export default createApp();
