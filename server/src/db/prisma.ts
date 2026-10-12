@@ -8,7 +8,9 @@ const adapter = new PrismaPg({
   // `pg` defaults to no connect timeout, which turns an unreachable database
   // into a hung request instead of a fast, clear error.
   connectionTimeoutMillis: 10_000,
-  max: env.isProduction ? 10 : 5,
+  // Serverless instances should hold few connections - the provider's pooler
+  // does the real multiplexing. Tune via DB_POOL_MAX on constrained hosts.
+  max: env.DB_POOL_MAX ?? (env.isProduction ? 10 : 5),
 });
 
 const createClient = () =>

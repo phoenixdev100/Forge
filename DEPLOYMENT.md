@@ -27,7 +27,41 @@ Seed demo + admin accounts once, after first boot:
 docker compose exec server npm run db:seed
 ```
 
-## Option B - separate hosts
+## Option B - Vercel (serverless API)
+
+`server/` is Vercel-ready: `api/index.js` exports the Express app as a
+function (no `listen()`), `vercel.json` routes every path to it, and
+`vercel-build` compiles `dist/` on deploy.
+
+1. Create a Vercel project with **Root Directory = `server`**.
+2. Set env vars in the dashboard (`DATABASE_URL`, `JWT_*_SECRET`,
+   `CORS_ORIGINS`, `APP_URL`, `MAIL_PROVIDER` + `SMTP_*`).
+   Also set **`DB_POOL_MAX=2`** - serverless instances should hold few
+   connections; the Neon/Supabase pooler multiplexes.
+3. Deploy: `vercel --prod` or git-push. Migrations are NOT applied by the
+   function - run `npm run db:deploy` locally/CI before deploying.
+
+Serverless notes:
+
+- **Uploads land in `/tmp`** (the only writable path) and are per-instance +
+  ephemeral. Media upload works, but files vanish - move to S3/R2 before
+  relying on admin media.
+- Rate limiting + the login throttle are **per-warm-instance** (in-memory).
+  Still useful, but not globally enforced.
+- `maxDuration` is 30s - the JSON/CSV export is the slowest request.
+- `trust proxy 1` matches Vercel's single edge hop; client IPs are correct.
+
+The SPA deploys as a second Vercel project (`client/` root) - see "SPA
+hosting notes" below for connecting them. `client/vercel.json` already ships
+the SPA fallback, immutable `/assets` caching, and security headers (CSP,
+nosniff, frame-deny). If you want the **same-origin proxy** instead of
+`VITE_API_URL`, add this rewrite BEFORE the SPA fallback there:
+
+```json
+{ "source": "/api/(.*)", "destination": "https://YOUR-API.vercel.app/api/$1" }
+```
+
+## Option C - separate hosts (VM / container)
 
 Continue below for the manual build/deploy path.
 
