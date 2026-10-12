@@ -3,9 +3,34 @@
  * listen() - Vercel invokes it as a request handler per invocation.
  * Non-serverless deploys keep using src/index.ts (listen + graceful shutdown).
  *
- * Built by `npm run build` (tsc -> dist/) before Vercel packages the function;
- * the bundler traces ../dist and node_modules automatically.
+ * The app is built lazily inside the handler: if any module-load step fails
+ * (env validation, bundling gaps), the error reaches the response as JSON
+ * instead of an opaque FUNCTION_INVOCATION_FAILED, and is logged for the
+ * Vercel runtime logs.
  */
-import { createApp } from '../dist/app.js';
 
-export default createApp();
+let appPromise;
+
+function getApp() {
+  appPromise ??= import('../dist/app.js').then((m) => m.createApp());
+  return appPromise;
+}
+
+export default async function handler(req, res) {
+  try {
+    const app = await getApp();
+    return app(req, res);
+  } catch (err) {
+    console.error('API boot failed:', err);
+    if (!res.headersSent) {
+      res.statusCode = 500;
+      res.setHeader('content-type', 'application/json');
+      res.end(
+        JSON.stringify({
+          error: 'BOOT_FAILED',
+          message: err instanceof Error ? err.message : String(err),
+        }),
+      );
+    }
+  }
+}

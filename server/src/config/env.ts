@@ -66,23 +66,21 @@ const schema = z.object({
 
 const parsed = schema.safeParse(process.env);
 
+// Fail fast and loudly: a half-configured server is worse than no server.
+// Thrown (not process.exit) so serverless handlers can surface the cause.
 if (!parsed.success) {
   const details = parsed.error.issues
     .map((issue) => `  - ${issue.path.join('.') || '(root)'}: ${issue.message}`)
     .join('\n');
-  // Fail fast and loudly: a half-configured server is worse than no server.
-  console.error(`\nInvalid environment configuration:\n${details}\n\nCopy server/.env.example to server/.env and fill it in.\n`);
-  process.exit(1);
+  throw new Error(`Invalid environment configuration:\n${details}\n\nCopy server/.env.example to server/.env and fill it in.`);
 }
 
 if (parsed.data.MAIL_PROVIDER === 'smtp' && !parsed.data.SMTP_HOST) {
-  console.error('\nInvalid environment configuration:\n  - SMTP_HOST is required when MAIL_PROVIDER=smtp\n');
-  process.exit(1);
+  throw new Error('Invalid environment configuration:\n  - SMTP_HOST is required when MAIL_PROVIDER=smtp');
 }
 
 if (parsed.data.SMTP_USER && !parsed.data.SMTP_PASS) {
-  console.error('\nInvalid environment configuration:\n  - SMTP_PASS is required when SMTP_USER is set\n');
-  process.exit(1);
+  throw new Error('Invalid environment configuration:\n  - SMTP_PASS is required when SMTP_USER is set');
 }
 
 export const env = {
