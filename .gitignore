@@ -1,0 +1,7 @@
+# Compose secrets - never commit the real file.
+.env
+
+# OS / editor noise
+.DS_Store
+Thumbs.db
+*.log

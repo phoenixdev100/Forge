@@ -1,0 +1,93 @@
+# Forge - full stack: Postgres + API + SPA (nginx).
+#
+#   cp .env.example .env        # set JWT secrets (and SMTP for email)
+#   docker compose up --build   # http://localhost:8080
+#
+# First run seeds nothing - create an account via the UI, or run:
+#   docker compose exec server npm run db:seed   # demo + admin accounts
+
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: forge
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?set DB_PASSWORD in .env}
+      POSTGRES_DB: forge
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U forge -d forge"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+    # Uncomment to reach Postgres from the host (Prisma Studio etc.)
+    # ports:
+    #   - "5432:5432"
+
+  # One-shot migrator: uses the Dockerfile's `build` stage, which has the full
+  # Prisma toolchain. The API only starts after this exits successfully.
+  migrate:
+    build:
+      context: ./server
+      target: build
+    command: node node_modules/prisma/build/index.js migrate deploy
+    environment:
+      DATABASE_URL: postgresql://forge:${DB_PASSWORD}@db:5432/forge
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: "no"
+
+  server:
+    build: ./server
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    environment:
+      NODE_ENV: production
+      PORT: "4000"
+      # Internal service name - no TLS needed inside the compose network.
+      DATABASE_URL: postgresql://forge:${DB_PASSWORD}@db:5432/forge
+      CORS_ORIGINS: ${APP_URL:-http://localhost:8080}
+      APP_URL: ${APP_URL:-http://localhost:8080}
+      JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET:?set in .env - crypto.randomBytes(48).toString('base64url')}
+      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:?set in .env - use a DIFFERENT random value}
+      LOG_LEVEL: info
+      MAIL_PROVIDER: ${MAIL_PROVIDER:-none}
+      MAIL_FROM: ${MAIL_FROM:-Forge <noreply@example.com>}
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_SECURE: ${SMTP_SECURE:-false}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASS: ${SMTP_PASS:-}
+      SEED_ADMIN_EMAIL: ${SEED_ADMIN_EMAIL:-admin@forge.local}
+      SEED_ADMIN_PASSWORD: ${SEED_ADMIN_PASSWORD:-ChangeMe123!}
+      SEED_DEMO_EMAIL: ${SEED_DEMO_EMAIL:-demo@forge.local}
+      SEED_DEMO_PASSWORD: ${SEED_DEMO_PASSWORD:-ChangeMe123!}
+    volumes:
+      - uploads:/app/uploads
+    expose:
+      - "4000"
+    # Uncomment to reach the API directly, bypassing the SPA proxy
+    # ports:
+    #   - "4000:4000"
+
+  client:
+    build:
+      context: ./client
+      args:
+        # Only for split-origin deploys; the bundled nginx proxies /api anyway.
+        VITE_API_URL: ${VITE_API_URL:-}
+    restart: unless-stopped
+    depends_on:
+      - server
+    ports:
+      - "8080:80"
+
+volumes:
+  pgdata:
+  uploads:
