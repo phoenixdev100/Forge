@@ -12,6 +12,8 @@ const schema = z.object({
   LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent']).default('info'),
 
   DATABASE_URL: z.string().min(1, 'DATABASE_URL is required'),
+  // Optional pg pool override - set low (~2) on serverless platforms.
+  DB_POOL_MAX: z.coerce.number().int().positive().optional(),
 
   CORS_ORIGINS: z
     .string()

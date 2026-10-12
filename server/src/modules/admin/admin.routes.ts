@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { promises as fsp } from 'node:fs';
+import fs from 'node:fs';
 import path from 'node:path';
 import { Router } from 'express';
 import multer from 'multer';
@@ -37,9 +38,15 @@ const ALLOWED_MIME: Record<string, { ext: string; type: MediaType }> = {
   'video/webm': { ext: '.webm', type: MediaType.VIDEO },
 };
 
+// Serverless filesystems (Vercel) are read-only outside /tmp. Files there are
+// still per-instance and ephemeral - real production uploads need object
+// storage - but this keeps the endpoint functional instead of crashing.
+const UPLOAD_DEST = process.env.VERCEL ? '/tmp/forge-uploads' : env.UPLOAD_DIR;
+fs.mkdirSync(UPLOAD_DEST, { recursive: true });
+
 const upload = multer({
   storage: multer.diskStorage({
-    destination: env.UPLOAD_DIR,
+    destination: UPLOAD_DEST,
     filename: (_req, file, cb) => cb(null, `${randomUUID()}${ALLOWED_MIME[file.mimetype]?.ext ?? '.bin'}`),
   }),
   limits: { fileSize: env.MAX_UPLOAD_MB * 1024 * 1024, files: 2 },
