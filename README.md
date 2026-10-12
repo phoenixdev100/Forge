@@ -44,12 +44,13 @@ Create a plan  →  Schedule it  →  Perform the workout  →  Record every set
 | --- | --- |
 | **Plans** | Custom cycle length, day labels, muscle-group tagging, per-set targets, drag-and-drop ordering, templates, duplicate days/exercises |
 | **Calendar & scheduling** | Plan-driven day resolution, rest/workout overrides, one-time and ongoing shift-forward, actionable empty days |
-| **Workout mode** | Set-by-set logging (weight/reps/time/distance), previous-performance hints, rest timer, add/remove exercises mid-workout, end-early |
-| **Progress** | Volume & e1RM trends, muscle-balance radar, per-exercise history, streaks |
+| **Workout mode** | Set-by-set logging (weight/reps/time/distance), previous-performance hints, auto-start rest timer, exercise swap, supersets, plate calculator, warm-up ramp, 1RM calculator, add/remove exercises mid-workout, end-early |
+| **Progress** | Volume & e1RM trends, muscle-balance radar, muscle recovery map, per-exercise history, streaks, double-progression coaching hints |
 | **Records** | PRs detected on entered values only (weight, reps, time, distance) - grouped by the session's marked date |
 | **Goals & achievements** | Custom goals, automatic milestone badges |
-| **Measurements** | Body metrics and progress photos |
+| **Body profile** | Onboarding collects sex/height/weight/DOB; dedicated profile page with measurements and progress photos |
 | **Exercise library** | Searchable, filterable catalog with custom exercises and admin-managed media |
+| **Data & PWA** | JSON/CSV export, installable app, offline shell + last-loaded data, session compare, shareable summary card, repeat-last-workout |
 | **Admin** | Exercise curation, publish states, upload demos |
 
 <div align="center">
@@ -87,8 +88,8 @@ gym-website/
 # 1 - API
 cd server
 npm install
-cp .env .env.local      # fill in DATABASE_URL + secrets (see below)
-npm run db:push         # create tables
+cp .env.example .env    # fill in DATABASE_URL + secrets (see below)
+npm run db:migrate      # create tables (versioned migration)
 npm run db:seed         # demo + admin accounts, exercise catalog
 npm run dev             # http://localhost:4000
 
@@ -120,8 +121,12 @@ Everything lives in `server/.env` - the file is commented section by section.
 | `ACCESS_TOKEN_TTL` / `REFRESH_TOKEN_TTL_DAYS` | Session lifetimes (`15m` / `30` defaults) |
 | `COOKIE_CROSS_SITE` / `COOKIE_DOMAIN` | Set only for cross-site HTTPS deployments |
 | `APP_URL` / `RESET_TOKEN_TTL_MINUTES` | Password-reset links |
+| `MAIL_PROVIDER` / `MAIL_FROM` | Email delivery - `smtp` or `none` (logs reset links in dev) |
+| `SMTP_HOST` / `SMTP_PORT` / `SMTP_SECURE` / `SMTP_USER` / `SMTP_PASS` | Your own SMTP account - Gmail: `smtp.gmail.com:465` + app password |
 | `UPLOAD_DIR` / `MAX_UPLOAD_MB` | Exercise demos & progress photos |
 | `SEED_*` | Accounts created by `npm run db:seed` |
+
+**Production deploy:** run `npm run db:deploy` (`prisma migrate deploy`) before `npm start` so pending migrations apply safely. Schema changes go through `npm run db:migrate` - never `db push` against production. Full runbook: [DEPLOYMENT.md](DEPLOYMENT.md).
 
 <div align="center">
 
@@ -137,7 +142,9 @@ Everything lives in `server/.env` - the file is commented section by section.
 | `npm run build` | `prisma generate` + `tsc` → `dist/` |
 | `npm start` | Run the built server |
 | `npm run typecheck` | `tsc --noEmit` |
-| `npm run db:push` / `db:migrate` | Schema sync |
+| `npm run db:migrate` | Create + apply a migration in dev |
+| `npm run db:deploy` | Apply pending migrations (production deploys) |
+| `npm run db:push` | Schema sync without history - dev only |
 | `npm run db:seed` | Seed catalog + demo accounts |
 | `npm run db:studio` | Prisma Studio |
 
@@ -166,8 +173,21 @@ All endpoints live under `/api`, authenticated via `HttpOnly` cookie JWTs
 | `/api/schedule` | Per-date resolution, overrides, shift-forward |
 | `/api/sessions` | Start/resume, log sets, complete/abandon/reopen, live exercise add-remove |
 | `/api/exercises`, `/api/muscle-groups`, `/api/taxonomy` | Exercise library & filters |
-| `/api/progress` | Trends, per-exercise history, personal records |
-| `/api/dashboard`, `/api/goals`, `/api/achievements`, `/api/measurements`, `/api/users`, `/api/admin` | Everything else |
+| `/api/progress` | Trends, per-exercise history, recovery map, personal records |
+| `/api/dashboard`, `/api/goals`, `/api/achievements`, `/api/measurements`, `/api/users` (profile + export), `/api/admin` | Everything else |
+
+<div align="center">
+
+## Docs
+
+</div>
+
+| Doc | Covers |
+| --- | --- |
+| [DEPLOYMENT.md](DEPLOYMENT.md) | Production deploy runbook - env, migrations, SMTP, scaling notes |
+| [SECURITY.md](SECURITY.md) | Security architecture + how to report vulnerabilities |
+| [CONTRIBUTING.md](CONTRIBUTING.md) | Module conventions, schema rules, dev workflow |
+| [LICENSE](LICENSE) | MIT |
 
 <div align="center">
 
