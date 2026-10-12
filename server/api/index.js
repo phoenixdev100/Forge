@@ -17,6 +17,13 @@ function getApp() {
 }
 
 export default async function handler(req, res) {
+  // Zero-dependency probe: if even this fails, Vercel never reaches user code
+  // and the problem is function registration/routing, not our modules.
+  if (req.url === '/__ping') {
+    res.setHeader('content-type', 'application/json');
+    res.end(JSON.stringify({ pong: true }));
+    return;
+  }
   try {
     const app = await getApp();
     return app(req, res);
