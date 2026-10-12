@@ -19,6 +19,16 @@ function getApp() {
 }
 
 export default async function handler(req, res) {
+  // Vercel sometimes sends an empty or rewrite-destination path for root.
+  // Normalize before handing to Express so the existing `app.get('/')` route
+  // and `/api/*` router still match correctly.
+  const originalUrl = req.originalUrl ?? req.url ?? '/';
+  const url = req.url && req.url.length > 0 ? req.url : originalUrl || '/';
+  console.log(`[handler] method=${req.method} url=${JSON.stringify(req.url)} originalUrl=${JSON.stringify(req.originalUrl)} normalized=${JSON.stringify(url)}`);
+
+  req.url = url;
+  if (req.originalUrl === undefined) req.originalUrl = originalUrl;
+
   // Zero-dependency probe: if even this fails, Vercel never reaches user code
   // and the problem is function registration/routing, not our modules.
   if (req.url === '/__ping') {
