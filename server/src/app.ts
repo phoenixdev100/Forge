@@ -1,13 +1,18 @@
-import express from 'express';
+import express, { type RequestHandler } from 'express';
 import cookieParser from 'cookie-parser';
 import cors from 'cors';
 import compression from 'compression';
-import helmet from 'helmet';
+import helmetImport, { type HelmetOptions } from 'helmet';
 import { pinoHttp } from 'pino-http';
 import { env } from './config/env.js';
 import { logger } from './lib/logger.js';
 import { errorHandler, notFoundHandler } from './middleware/error.js';
 import apiRouter from './routes.js';
+
+// helmet's dual CJS/ESM build binds differently by resolver - a `require`
+// condition yields the namespace {default: fn}, `import` yields the fn.
+const helmet = ((helmetImport as unknown as { default?: unknown }).default ??
+  helmetImport) as (options?: HelmetOptions) => RequestHandler;
 
 export function createApp() {
   const app = express();
